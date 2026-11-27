@@ -1,0 +1,15 @@
+country_code: "pe"
+country_name: "Perú"
+status: "planned"
+currency: "PEN"
+locale: "es-PE"
+timezone: "America/Lima"
+min_wage_local: 1130
+transport_aid_local: 0
+min_wage_source: "RMV Perú (referencia INEI / MTPE)"
+taxonomy_system: "NSE_APEIM"
+metadata:
+  payment_methods: ["Yape", "Plin", "Efectivo", "Tarjeta", "Transferencia BCP/Interbank"]
+  privacy_law: "Ley 29733"
+  consumer_law: "Código de Protección y Defensa del Consumidor (Ley 29571)"
+  notes: "CountryPack LATAM Perú (Anexo I V3)."

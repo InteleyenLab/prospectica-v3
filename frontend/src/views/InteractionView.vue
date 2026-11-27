@@ -3,7 +3,8 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">MIROFISH</div>
+        <div class="brand" @click="router.push('/')">{{ brandConfig.uppercaseName }}</div>
+        <button class="home-btn" title="Volver al inicio para crear un nuevo proyecto" @click="router.push('/')">&larr; Inicio / Nuevo proyecto</button>
       </div>
       
       <div class="header-center">
@@ -21,10 +22,8 @@
       </div>
 
       <div class="header-right">
-        <LanguageSwitcher />
-        <div class="step-divider"></div>
         <div class="workflow-step">
-          <span class="step-num">Step 5/5</span>
+          <span class="step-num">{{ $t('common.step') || 'Paso' }} 5/5</span>
           <span class="step-name">{{ $tm('main.stepNames')[4] }}</span>
         </div>
         <div class="step-divider"></div>
@@ -49,7 +48,7 @@
         />
       </div>
 
-      <!-- Right Panel: Step5 深度互动 -->
+      <!-- Right Panel: Step5 -->
       <div class="panel-wrapper right" :style="rightPanelStyle">
         <Step5Interaction
           :reportId="currentReportId"
@@ -72,7 +71,7 @@ import Step5Interaction from '../components/Step5Interaction.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 import { getReport } from '../api/report'
-import LanguageSwitcher from '../components/LanguageSwitcher.vue'
+import { brandConfig } from '../config/brand.config'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,7 +82,7 @@ const props = defineProps({
   reportId: String
 })
 
-// Layout State - 默认切换到工作台视角
+// Layout State -
 const viewMode = ref('workbench')
 
 // Data State
@@ -114,10 +113,10 @@ const statusClass = computed(() => {
 })
 
 const statusText = computed(() => {
-  if (currentStatus.value === 'error') return 'Error'
-  if (currentStatus.value === 'completed') return 'Completed'
-  if (currentStatus.value === 'processing') return 'Processing'
-  return 'Ready'
+  if (currentStatus.value === 'error') return t('common.error') || 'Error'
+  if (currentStatus.value === 'completed') return t('common.completed') || 'Completado'
+  if (currentStatus.value === 'processing') return t('common.processing') || 'Procesando'
+  return t('common.ready') || 'Listo'
 })
 
 // --- Helpers ---
@@ -147,26 +146,26 @@ const loadReportData = async () => {
   try {
     addLog(t('log.loadReportData', { id: currentReportId.value }))
 
-    // 获取 report 信息以获取 simulation_id
+    //  report  simulation_id
     const reportRes = await getReport(currentReportId.value)
     if (reportRes.success && reportRes.data) {
       const reportData = reportRes.data
       simulationId.value = reportData.simulation_id
 
       if (simulationId.value) {
-        // 获取 simulation 信息
+        //  simulation
         const simRes = await getSimulation(simulationId.value)
         if (simRes.success && simRes.data) {
           const simData = simRes.data
 
-          // 获取 project 信息
+          //  project
           if (simData.project_id) {
             const projRes = await getProject(simData.project_id)
             if (projRes.success && projRes.data) {
               projectData.value = projRes.data
               addLog(t('log.projectLoadSuccess', { id: projRes.data.project_id }))
 
-              // 获取 graph 数据
+              //  graph
               if (projRes.data.graph_id) {
                 await loadGraph(projRes.data.graph_id)
               }
@@ -241,10 +240,15 @@ onMounted(() => {
   position: relative;
 }
 
+.header-left {
+  flex-shrink: 0;
+}
+
 .header-center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .brand {
@@ -273,6 +277,7 @@ onMounted(() => {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .switch-btn.active {
@@ -285,6 +290,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .workflow-step {

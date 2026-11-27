@@ -1,0 +1,104 @@
+archetypes:
+  - code: "ROLO_PRAGMATICO"
+    name: "Rolo Pragmático (Altiplano Cundiboyacense)"
+    region_macro: "Andina Centro"
+    cities: ["Bogotá D.C.", "Soacha", "Tunja"]
+    communication_register: "Directo, formal-urbano, orientado a tiempo, trámites y respaldo legal."
+    controlled_slang: ["qué pena", "sumercé", "de una", "vuelta", "enredado", "chicharrón"]
+    purchase_drivers:
+      - "Ahorro de tiempo en filas y trámites"
+      - "Contrato claro y trazabilidad documental"
+      - "Soporte ágil por WhatsApp con respuestas concretas"
+    skepticism_triggers:
+      - "Promesas exageradas o garantías de éxito sin soporte"
+      - "Cobros ocultos o intermediarios informales"
+      - "Desconocimiento de normas de tránsito o aseguradoras"
+    social_trust_anchor: "Respaldo verificable (RUT, contrato, reseñas de pares)"
+
+  - code: "PAISA_EMPRENDEDOR"
+    name: "Paisa Emprendedor (Antioquia y Eje Cafetero)"
+    region_macro: "Paisa / Eje Cafetero"
+    cities: ["Medellín", "Pereira", "Manizales", "Armenia"]
+    communication_register: "Cercano, comercial, orientado a relación costo-beneficio y confianza mutua."
+    controlled_slang: ["pues", "parce", "qué más", "de una", "hágale", "camello"]
+    purchase_drivers:
+      - "Relación costo-beneficio medible y ROI claro"
+      - "Atención cálida pero resolutiva"
+      - "Recomendación de conocidos o talleres aliados"
+    skepticism_triggers:
+      - "Burocracia lenta o respuestas evasivas"
+      - "Falta de claridad en tarifas desde el primer mensaje"
+    social_trust_anchor: "Recomendación de red cercana (taller, contador, gremio)"
+
+  - code: "CALEÑO_RESOLUTIVO"
+    name: "Caleño y Pacífico Resolutivo"
+    region_macro: "Pacífica"
+    cities: ["Cali", "Popayán", "Pasto", "Quibdó"]
+    communication_register: "Expresivo, práctico, busca soluciones rápidas y trato humano sin rodeos."
+    controlled_slang: ["ve", "mirá", "oís", "de una", "vuelta", "chévere"]
+    purchase_drivers:
+      - "Solución práctica inmediata tras un siniestro"
+      - "Acompañamiento paso a paso por audio o WhatsApp"
+      - "Tarifa inicial accesible (pago por hitos)"
+    skepticism_triggers:
+      - "Lenguaje excesivamente jurídico y frío"
+      - "Sensación de abandono tras pagar el diagnóstico"
+    social_trust_anchor: "Trato humano directo y casos reales resueltos en la ciudad"
+
+  - code: "COSTEÑO_EXPRESIVO"
+    name: "Costeño Expresivo (Caribe)"
+    region_macro: "Caribe"
+    cities: ["Barranquilla", "Cartagena", "Santa Marta", "Montería", "Valledupar", "Sincelejo", "Riohacha", "San Andrés"]
+    communication_register: "Ameno, conversacional, valora la confianza personal y la claridad verbal."
+    controlled_slang: ["ajá", "compa", "nombe", "cuadro", "chévere", "vaina"]
+    purchase_drivers:
+      - "Explicación sencilla sin tecnicismos innecesarios"
+      - "Atención rápida por WhatsApp con seguimiento cercano"
+      - "Claridad sobre si vale la pena reclamar antes de gastar"
+    skepticism_triggers:
+      - "Cobros por adelantado sin explicar alcance"
+      - "Formularios largos antes de hablar con un asesor"
+    social_trust_anchor: "Cercanía verbal y transparencia en expectativas reales"
+
+  - code: "SANTANDEREANO_FRANCO"
+    name: "Santandereano Franco (Nororiente)"
+    region_macro: "Santanderes"
+    cities: ["Bucaramanga", "Cúcuta"]
+    communication_register: "Firme, franco, exigente con la palabra empeñada y los resultados concretos."
+    controlled_slang: ["mano", "pingo", "hágale", "de frente", "fijo"]
+    purchase_drivers:
+      - "Honestidad brutal sobre probabilidades y tiempos"
+      - "Orden documental sin promesas vacías"
+      - "Cumplimiento estricto de plazos acordados"
+    skepticism_triggers:
+      - "Discursos blandos o evasivos ante preguntas difíciles"
+      - "Falta de transparencia en honorarios"
+    social_trust_anchor: "Palabra cumplida y datos verificables"
+
+  - code: "TOLIMENSE_TERRITORIAL"
+    name: "Andino Sur y Territorial"
+    region_macro: "Andina Sur"
+    cities: ["Ibagué", "Neiva"]
+    communication_register: "Pausado, respetuoso, evalúa riesgos antes de comprometer dinero."
+    controlled_slang: ["sumercé", "venga le digo", "bueno pues", "listo"]
+    purchase_drivers:
+      - "Bajo costo de entrada para validar viabilidad"
+      - "Acompañamiento ordenado con lista exacta de soportes"
+    skepticism_triggers:
+      - "Presión comercial agresiva o falsa urgencia"
+      - "Desconocimiento de condiciones locales"
+    social_trust_anchor: "Claridad escrita y bajo riesgo financiero inicial"
+
+  - code: "LLANERO_AMAZONICO_DIRECTO"
+    name: "Orinoquía y Amazonía Directo"
+    region_macro: "Orinoquía / Amazonía"
+    cities: ["Villavicencio", "Yopal", "Arauca", "Florencia", "Leticia", "Mocoa", "San José del Guaviare", "Mitú", "Inírida", "Puerto Carreño"]
+    communication_register: "Práctico, directo, acostumbrado a resolver a distancia y con poca oferta local especializada."
+    controlled_slang: ["pariente", "compa", "de una", "a lo bien"]
+    purchase_drivers:
+      - "Atención 100% remota confiable por WhatsApp"
+      - "Guía clara cuando no hay oficinas de aseguradoras cerca"
+    skepticism_triggers:
+      - "Exigir desplazamientos presenciales innecesarios"
+      - "Falta de seguimiento post-pago"
+    social_trust_anchor: "Accesibilidad remota y claridad operativa"

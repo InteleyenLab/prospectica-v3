@@ -4,6 +4,7 @@ Report API路由
 """
 
 import os
+import time
 import traceback
 import threading
 from flask import request, jsonify, send_file
@@ -13,6 +14,12 @@ from ..config import Config
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
+from ..services.study_context_builder import (
+    extract_real_project_name,
+    is_placeholder_project_name,
+    load_study_context,
+    slugify_project_name,
+)
 from ..services.zep_graph_memory_updater import ZepGraphMemoryManager
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
@@ -83,6 +90,24 @@ def generate_report():
 
         run_state = SimulationRunner.get_run_state(simulation_id)
         updater = ZepGraphMemoryManager.get_updater(simulation_id)
+
+        # Si la simulación completó todas las rondas pero el entorno sigue en espera de comandos,
+        # cerramos el entorno automáticamente para que la ingesta de Zep finalice sin error 409
+        if (
+            run_state is not None
+            and run_state.runner_status == RunnerStatus.COMPLETED
+            and updater is not None
+        ):
+            try:
+                SimulationRunner.close_simulation_env(simulation_id)
+                for _ in range(120):
+                    if ZepGraphMemoryManager.get_updater(simulation_id) is None:
+                        updater = None
+                        break
+                    time.sleep(0.5)
+            except Exception as e:
+                logger.warning(f"No se pudo cerrar automáticamente el entorno de simulación: {e}")
+
         active_statuses = {
             RunnerStatus.STARTING,
             RunnerStatus.RUNNING,
@@ -346,8 +371,24 @@ def get_generate_status():
         
         task_id = data.get('task_id')
         simulation_id = data.get('simulation_id')
-        
-        # 如果提供了simulation_id，先检查是否已有完成的报告
+
+        # Priorizar task_id cuando está presente (evita retornar informe previo en regeneraciones)
+        if task_id:
+            task_manager = TaskManager()
+            task = task_manager.get_task(task_id)
+
+            if not task:
+                return jsonify({
+                    "success": False,
+                    "error": t('api.taskNotFound', id=task_id)
+                }), 404
+
+            return jsonify({
+                "success": True,
+                "data": task.to_dict()
+            })
+
+        # Si no se pasó task_id, verificar si existe un informe ya completado para simulation_id
         if simulation_id:
             existing_report = ReportManager.get_report_by_simulation(simulation_id)
             if existing_report and existing_report.status == ReportStatus.COMPLETED:
@@ -362,26 +403,11 @@ def get_generate_status():
                         "already_completed": True
                     }
                 })
-        
-        if not task_id:
-            return jsonify({
-                "success": False,
-                "error": t('api.requireTaskOrSimId')
-            }), 400
-        
-        task_manager = TaskManager()
-        task = task_manager.get_task(task_id)
-        
-        if not task:
-            return jsonify({
-                "success": False,
-                "error": t('api.taskNotFound', id=task_id)
-            }), 404
-        
+
         return jsonify({
-            "success": True,
-            "data": task.to_dict()
-        })
+            "success": False,
+            "error": t('api.requireTaskOrSimId')
+        }), 400
         
     except Exception as e:
         logger.error(f"查询任务状态失败: {str(e)}")
@@ -514,6 +540,88 @@ def list_reports():
         }), 500
 
 
+def _resolve_download_filename(report) -> str:
+    """Resuelve el nombre de descarga `{project_slug}_{report_id}.md` evitando marcas genéricas."""
+    import json
+
+    ignored_slugs = {
+        "",
+        "unnamed_project",
+        "prospectica",
+        "prospectica_inc",
+        "proyecto_estudio",
+        "estudio_de_mercado",
+    }
+
+    # 1. Revisar report_manifest.json si existe
+    manifest_candidates = [
+        os.path.join(ReportManager._get_report_folder(report.report_id), "report_manifest.json"),
+        os.path.join(Config.UPLOAD_FOLDER, "reports", report.report_id, "report_manifest.json"),
+    ]
+    for mpath in manifest_candidates:
+        if os.path.exists(mpath):
+            try:
+                with open(mpath, "r", encoding="utf-8") as mf:
+                    manifest = json.load(mf)
+                m_slug = manifest.get("project_slug")
+                if isinstance(m_slug, str) and slugify_project_name(m_slug) not in ignored_slugs:
+                    return f"{slugify_project_name(m_slug)}_{report.report_id}.md"
+                m_name = manifest.get("project_name")
+                if isinstance(m_name, str) and not is_placeholder_project_name(m_name):
+                    return f"{slugify_project_name(m_name)}_{report.report_id}.md"
+            except Exception:
+                pass
+
+    # 2. Revisar StudyContext / Project asociados a la simulación
+    project = None
+    if getattr(report, "simulation_id", None):
+        try:
+            sim_state = SimulationManager().get_simulation(report.simulation_id)
+            if sim_state and sim_state.project_id:
+                study_ctx = load_study_context(sim_state.project_id)
+                if study_ctx:
+                    s_slug = study_ctx.get("project_slug")
+                    if isinstance(s_slug, str) and slugify_project_name(s_slug) not in ignored_slugs:
+                        return f"{slugify_project_name(s_slug)}_{report.report_id}.md"
+                    s_name = study_ctx.get("project_name")
+                    if isinstance(s_name, str) and not is_placeholder_project_name(s_name):
+                        return f"{slugify_project_name(s_name)}_{report.report_id}.md"
+                project = ProjectManager.get_project(sim_state.project_id)
+                if project and project.name and not is_placeholder_project_name(project.name):
+                    return f"{slugify_project_name(project.name)}_{report.report_id}.md"
+        except Exception:
+            pass
+
+    # 3. Extracción desde requirement / archivos / título de outline
+    outline_title = report.outline.title if getattr(report, "outline", None) else None
+    title_hint = None
+    if isinstance(outline_title, str) and outline_title.strip():
+        candidate_hint = outline_title.split("·")[0].strip()
+        if not is_placeholder_project_name(candidate_hint):
+            title_hint = candidate_hint
+
+    extracted_text = ""
+    filenames: list[str] = []
+    req_text = getattr(report, "simulation_requirement", "") or ""
+    if project is not None:
+        try:
+            extracted_text = ProjectManager.get_extracted_text(project.project_id) or ""
+            filenames = [f.get("filename", "") for f in (project.files or []) if isinstance(f, dict)]
+            if not req_text:
+                req_text = project.simulation_requirement or ""
+        except Exception:
+            pass
+
+    resolved_name = extract_real_project_name(
+        extracted_text=extracted_text,
+        simulation_requirement=req_text,
+        filenames=filenames,
+        project_name_hint=title_hint,
+    )
+    slug = slugify_project_name(resolved_name)
+    return f"{slug}_{report.report_id}.md"
+
+
 @report_bp.route('/<report_id>/download', methods=['GET'])
 def download_report(report_id: str):
     """
@@ -530,25 +638,68 @@ def download_report(report_id: str):
                 "error": t('api.reportNotFound', id=report_id)
             }), 404
         
+        import json
+        from pathlib import Path
+        fmt = (request.args.get("format") or "md").strip().lower()
+        download_filename = _resolve_download_filename(report)
         md_path = ReportManager._get_report_markdown_path(report_id)
+        report_folder = Path(ReportManager._get_report_folder(report_id))
+
+        if fmt in ("pdf", "pptx", "xlsx", "zip"):
+            from ..services.report_exporters import export_pdf, export_pptx, export_xlsx, export_zip
+
+            manifest_path = report_folder / "report_manifest.json"
+            manifest = (
+                json.loads(manifest_path.read_text(encoding="utf-8"))
+                if manifest_path.exists()
+                else {
+                    "report_id": report_id,
+                    "simulation_id": getattr(report, "simulation_id", ""),
+                    "project_name": Path(download_filename).stem,
+                    "project_slug": Path(download_filename).stem.replace(f"_{report_id}", ""),
+                    "title": f"Estudio {report_id}",
+                }
+            )
+            full_md = Path(md_path).read_text(encoding="utf-8") if os.path.exists(md_path) else (report.markdown_content or "")
+            chapters_dir = report_folder / "chapters"
+            chapters = []
+            if chapters_dir.exists():
+                for p in sorted(chapters_dir.glob("*.json")):
+                    try:
+                        chapters.append(json.loads(p.read_text(encoding="utf-8")))
+                    except Exception:
+                        pass
+            sim_id = manifest.get("simulation_id") or getattr(report, "simulation_id", "")
+            bundle_path = Path(Config.UPLOAD_FOLDER) / "simulations" / str(sim_id) / "analytics_bundle.json"
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8")) if bundle_path.exists() else {}
+
+            if fmt == "pdf":
+                out_file = export_pdf(report_folder, manifest, full_md)
+            elif fmt == "pptx":
+                out_file = export_pptx(report_folder, manifest, chapters)
+            elif fmt == "xlsx":
+                out_file = export_xlsx(report_folder, manifest, bundle)
+            else:
+                out_file = export_zip(report_folder, manifest, full_md, bundle, chapters)
+            return send_file(str(out_file), as_attachment=True, download_name=out_file.name)
         
         if not os.path.exists(md_path):
             # 如果MD文件不存在，生成一个临时文件
             import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                f.write(report.markdown_content)
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.md', delete=False) as f:
+                f.write(report.markdown_content or "")
                 temp_path = f.name
             
             return send_file(
                 temp_path,
                 as_attachment=True,
-                download_name=f"{report_id}.md"
+                download_name=download_filename
             )
         
         return send_file(
             md_path,
             as_attachment=True,
-            download_name=f"{report_id}.md"
+            download_name=download_filename
         )
         
     except Exception as e:
@@ -616,12 +767,58 @@ def chat_with_report_agent():
         }
     """
     try:
-        data = request.get_json() or {}
+        attached_context = ""
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            import json as _json
+            import tempfile
+            from ..utils.file_parser import FileParser
+            data = request.form.to_dict()
+            try:
+                data['chat_history'] = _json.loads(data.get('chat_history') or '[]')
+            except Exception:
+                data['chat_history'] = []
+            parts = []
+            for f in request.files.getlist('files'):
+                if not f or not f.filename:
+                    continue
+                ext = os.path.splitext(f.filename)[1].lower()
+                if ext not in {'.pdf', '.md', '.markdown', '.txt', '.csv', '.json'}:
+                    continue
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+                tmp.close()
+                try:
+                    f.save(tmp.name)
+                    if ext in {'.csv', '.json'}:
+                        with open(tmp.name, 'rb') as fh:
+                            raw = fh.read()
+                        try:
+                            text = raw.decode('utf-8')
+                        except UnicodeDecodeError:
+                            text = raw.decode('latin-1', errors='replace')
+                    else:
+                        text = FileParser.extract_text(tmp.name)
+                    parts.append(f"### Archivo: {f.filename}\n{(text or '')[:6000]}")
+                except Exception as fe:
+                    logger.warning(f"No se pudo leer adjunto {f.filename}: {fe}")
+                finally:
+                    try:
+                        os.remove(tmp.name)
+                    except OSError:
+                        pass
+            attached_context = "\n\n".join(parts)
+        else:
+            data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
+        report_id = data.get('report_id')
         message = data.get('message')
         chat_history = data.get('chat_history', [])
         
+        if not simulation_id and report_id:
+            rep = ReportManager.get_report(report_id)
+            if rep:
+                simulation_id = rep.simulation_id
+
         if not simulation_id:
             return jsonify({
                 "success": False,
@@ -660,14 +857,15 @@ def chat_with_report_agent():
         
         simulation_requirement = project.simulation_requirement or ""
         
-        # 创建Agent并进行对话
+        # 创建Agent并进行对话 (herramientas reales habilitadas en Fase 5)
         agent = ReportAgent(
             graph_id=graph_id,
             simulation_id=simulation_id,
-            simulation_requirement=simulation_requirement
+            simulation_requirement=simulation_requirement,
+            enable_tools=True
         )
         
-        result = agent.chat(message=message, chat_history=chat_history)
+        result = agent.chat(message=message, chat_history=chat_history, report_id=report_id, attached_context=attached_context)
         
         return jsonify({
             "success": True,
@@ -1137,3 +1335,73 @@ def get_graph_statistics_tool():
             "error": str(e),
             "traceback": traceback.format_exc()
         }), 500
+
+
+@report_bp.route('/<report_id>/manifest', methods=['GET'])
+def get_report_manifest(report_id: str):
+    """Retorna `report_manifest.json` o fallback retrocompatible para informes legados."""
+    import json
+    from pathlib import Path
+
+    report_dir = Path(Config.UPLOAD_FOLDER) / 'reports' / report_id
+    manifest_path = report_dir / 'report_manifest.json'
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        return jsonify({"success": True, "data": manifest})
+
+    report = ReportManager.get_report(report_id)
+    if not report:
+        return jsonify({"success": False, "error": t('api.reportNotFound', id=report_id)}), 404
+
+    sections = report.outline.sections if report.outline else []
+    fallback_manifest = {
+        "report_id": report_id,
+        "simulation_id": report.simulation_id,
+        "version": "legacy_v1",
+        "title": report.outline.title if report.outline else f"Informe {report_id}",
+        "summary": report.outline.summary if report.outline else "",
+        "chapters": [
+            {
+                "chapter_number": idx + 1,
+                "chapter_key": f"{idx + 1:02d}",
+                "title": sec.title,
+                "description": "",
+                "charts_keys": [],
+            }
+            for idx, sec in enumerate(sections)
+        ],
+        "charts_spec": {},
+        "warnings": ["MODO_LEGADO: Informe generado antes de ReportAgentV2."],
+    }
+    return jsonify({"success": True, "data": fallback_manifest})
+
+
+@report_bp.route('/<report_id>/chapter/<int:chapter_num>', methods=['GET'])
+def get_report_chapter(report_id: str, chapter_num: int):
+    """Retorna el capítulo estructurado (`chapters/XX.json`) o fallback desde `section_XX.md`."""
+    import json
+    from pathlib import Path
+
+    ch_key = f"{chapter_num:02d}"
+    report_dir = Path(Config.UPLOAD_FOLDER) / 'reports' / report_id
+    ch_path = report_dir / 'chapters' / f"{ch_key}.json"
+    if ch_path.exists():
+        chapter_data = json.loads(ch_path.read_text(encoding='utf-8'))
+        return jsonify({"success": True, "data": chapter_data})
+
+    sec_path = report_dir / f"section_{ch_key}.md"
+    if sec_path.exists():
+        content = sec_path.read_text(encoding='utf-8')
+        return jsonify({
+            "success": True,
+            "data": {
+                "chapter_number": chapter_num,
+                "chapter_key": ch_key,
+                "title": f"Sección {ch_key}",
+                "content_markdown": content,
+                "metrics_payload": {},
+                "charts_keys": [],
+            },
+        })
+
+    return jsonify({"success": False, "error": t('api.sectionNotFound', index=ch_key)}), 404

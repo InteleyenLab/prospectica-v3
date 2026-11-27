@@ -76,7 +76,7 @@ class GraphBuilderService:
         self,
         text: str,
         ontology: Dict[str, Any],
-        graph_name: str = "MiroFish Graph",
+        graph_name: str = "Prospéctica Market Intelligence Graph",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         batch_size: int = 350
@@ -127,7 +127,7 @@ class GraphBuilderService:
         chunk_size: int,
         chunk_overlap: int,
         batch_size: int,
-        locale: str = 'zh'
+        locale: str = 'es'
     ):
         """图谱构建工作线程"""
         set_locale(locale)
@@ -234,7 +234,7 @@ class GraphBuilderService:
             self.client.graph.create(
                 graph_id=graph_id,
                 name=name,
-                description="MiroFish Social Simulation Graph"
+                description="Prospéctica Inc. - Grafo de Inteligencia Social y de Mercados"
             )
         except Exception as error:
             if not is_retryable_zep_error(error):

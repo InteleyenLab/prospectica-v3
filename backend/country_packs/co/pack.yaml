@@ -1,0 +1,13 @@
+country_code: "co"
+country_name: "Colombia"
+status: "active"
+currency: "COP"
+locale: "es-CO"
+timezone: "America/Bogota"
+min_wage_local: 1750905
+transport_aid_local: 249095
+min_wage_source: "Decretos 1469 y 1470 MinTrabajo (SMMLV 2026)"
+taxonomy_system: "CO_ESTRATO_LEY142"
+metadata:
+  period_anchor: "2026-Q2"
+  data_authority: "DANE / MinTIC / Superfinanciera / BanRep"

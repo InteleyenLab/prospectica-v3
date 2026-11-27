@@ -30,7 +30,7 @@ def test_short_ontology_context_keeps_original_text():
     context = generator._build_document_context(["short document body"])
 
     assert context == "short document body"
-    assert "长文本自动分块摘要" not in context
+    assert "[Resumen de muestreo global]" not in context
 
 
 def test_long_ontology_context_samples_across_document():
@@ -40,13 +40,13 @@ def test_long_ontology_context_samples_across_document():
     context = generator._build_document_context([long_text])
 
     assert len(context) <= generator.MAX_TEXT_LENGTH_FOR_LLM
-    assert "长文本自动分块摘要" in context
+    assert "[Resumen de muestreo global]" in context
     assert "BEGIN" in context
     assert "MIDDLE" in context
     assert "END" in context
-    assert "分块 1/" in context
-    assert "分块 3/" in context
-    assert "分块 5/" in context
+    assert "Bloque 1/" in context
+    assert "Bloque 3/" in context
+    assert "Bloque 5/" in context
 
 
 def test_very_long_ontology_context_selects_representative_chunks():
@@ -62,10 +62,10 @@ def test_very_long_ontology_context_selects_representative_chunks():
     assert len(context) <= generator.MAX_TEXT_LENGTH_FOR_LLM
     assert "BEGIN" in context
     assert "FINALEND" in context
-    assert context.count("--- 文档 1 / 分块") == generator.MAX_LONG_TEXT_CHUNKS
+    assert context.count("--- Documento 1 | Bloque") == generator.MAX_LONG_TEXT_CHUNKS
 
 
-def test_ontology_generation_does_not_cap_structured_output_tokens():
+def test_ontology_generation_caps_structured_output_tokens_safely():
     llm = RecordingLLMClient()
     generator = OntologyGenerator(llm_client=llm)
 
@@ -75,5 +75,5 @@ def test_ontology_generation_does_not_cap_structured_output_tokens():
     )
 
     assert result["analysis_summary"] == "ok"
-    assert llm.calls[0]["max_tokens"] is None
+    assert llm.calls[0]["max_tokens"] == 8000
     assert llm.calls[0]["max_attempts"] == 2

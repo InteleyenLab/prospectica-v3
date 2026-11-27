@@ -1,23 +1,16 @@
 <template>
   <div class="home-container">
-    <!-- 顶部导航栏 -->
+    <!-- -->
     <nav class="navbar">
-      <div class="nav-brand">MIROFISH</div>
-      <div class="nav-links">
-        <LanguageSwitcher />
-        <a href="https://github.com/666ghj/MiroFish" target="_blank" class="github-link">
-          {{ $t('nav.visitGithub') }} <span class="arrow">↗</span>
-        </a>
-      </div>
+      <div class="nav-brand">{{ brandConfig.uppercaseName }}</div>
     </nav>
 
     <div class="main-content">
-      <!-- 上半部分：Hero 区域 -->
+      <!-- ：Hero -->
       <section class="hero-section">
         <div class="hero-left">
           <div class="tag-row">
             <span class="orange-tag">{{ $t('home.tagline') }}</span>
-            <span class="version-text">{{ $t('home.version') }}</span>
           </div>
           
           <h1 class="main-title">
@@ -42,9 +35,9 @@
         </div>
         
         <div class="hero-right">
-          <!-- Logo 区域 -->
+          <!-- Logo -->
           <div class="logo-container">
-            <img src="../assets/logo/MiroFish_logo_left.jpeg" alt="MiroFish Logo" class="hero-logo" />
+            <img :src="prospecticaLogo" :alt="brandConfig.name" class="hero-logo" />
           </div>
           
           <button class="scroll-down-btn" @click="scrollToBottom">
@@ -53,9 +46,9 @@
         </div>
       </section>
 
-      <!-- 下半部分：双栏布局 -->
+      <!-- ： -->
       <section class="dashboard-section">
-        <!-- 左栏：状态与步骤 -->
+        <!-- ： -->
         <div class="left-panel">
           <div class="panel-header">
             <span class="status-dot">■</span> {{ $t('home.systemStatus') }}
@@ -66,7 +59,7 @@
             {{ $t('home.systemReadyDesc') }}
           </p>
           
-          <!-- 数据指标卡片 -->
+          <!-- -->
           <div class="metrics-row">
             <div class="metric-card">
               <div class="metric-value">{{ $t('home.metricLowCost') }}</div>
@@ -78,7 +71,7 @@
             </div>
           </div>
 
-          <!-- 项目模拟步骤介绍 (新增区域) -->
+          <!-- () -->
           <div class="steps-container">
             <div class="steps-header">
                <span class="diamond-icon">◇</span> {{ $t('home.workflowSequence') }}
@@ -123,10 +116,10 @@
           </div>
         </div>
 
-        <!-- 右栏：交互控制台 -->
+        <!-- ： -->
         <div class="right-panel">
           <div class="console-box">
-            <!-- 上传区域 -->
+            <!-- -->
             <div class="console-section">
               <div class="console-header">
                 <span class="console-label">{{ $t('home.realitySeed') }}</span>
@@ -167,12 +160,12 @@
               </div>
             </div>
 
-            <!-- 分割线 -->
+            <!-- -->
             <div class="console-divider">
               <span>{{ $t('home.inputParams') }}</span>
             </div>
 
-            <!-- 输入区域 -->
+            <!-- -->
             <div class="console-section">
               <div class="console-header">
                 <span class="console-label">{{ $t('home.simulationPrompt') }}</span>
@@ -189,7 +182,133 @@
               </div>
             </div>
 
-            <!-- 启动按钮 -->
+            <!-- Contexto Territorial y Demográfico (Opcional) -->
+            <div class="console-section territorial-section">
+              <div class="territorial-header" @click="showTerritorial = !showTerritorial">
+                <span class="console-label">Contexto Territorial y Demográfico (Opcional)</span>
+                <span class="territorial-toggle">
+                  {{ territorialSummary }} · {{ showTerritorial ? 'Ocultar' : 'Configurar' }}
+                </span>
+              </div>
+
+              <div v-if="showTerritorial" class="territorial-panel">
+                <div class="territorial-row">
+                  <div class="territorial-field">
+                    <label class="field-label" for="country-select">País</label>
+                    <select id="country-select" v-model="territorial.countryCode" class="territorial-select">
+                      <option
+                        v-for="pack in availablePacks"
+                        :key="pack.country_code"
+                        :value="pack.country_code"
+                        :disabled="pack.status === 'planned'"
+                      >
+                        {{ pack.country_name }} ({{ pack.country_code.toUpperCase() }}){{ pack.status === 'planned' ? ' - Próximamente' : '' }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <div class="territorial-field">
+                    <label class="field-label" for="city-search">Agregar ciudad ({{ availableCities.length }})</label>
+                    <select id="city-search" class="territorial-select" @change="addCityFromSelect">
+                      <option value="">Seleccionar ciudad...</option>
+                      <option
+                        v-for="c in availableCities"
+                        :key="c.divipola_code"
+                        :value="c.city_name"
+                      >
+                        {{ c.city_name }} ({{ c.region_macro }})
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="chip-group">
+                  <span class="field-label">Selección rápida de ciudades:</span>
+                  <button type="button" class="territorial-chip" @click="selectCityGroup('all')">
+                    Todas ({{ availableCities.length }})
+                  </button>
+                  <button type="button" class="territorial-chip" @click="selectCityGroup('primary')">
+                    Principales (6)
+                  </button>
+                  <button type="button" class="territorial-chip" @click="selectCityGroup('secondary')">
+                    Secundarias
+                  </button>
+                  <button
+                    v-if="territorial.targetCities.length > 0"
+                    type="button"
+                    class="territorial-chip"
+                    @click="selectCityGroup('clear')"
+                  >
+                    Limpiar ({{ territorial.targetCities.length }})
+                  </button>
+                </div>
+
+                <div v-if="territorial.targetCities.length > 0" class="chip-group">
+                  <button
+                    v-for="city in territorial.targetCities"
+                    :key="city"
+                    type="button"
+                    class="territorial-chip active"
+                    @click="toggleCity(city)"
+                  >
+                    {{ city }} ×
+                  </button>
+                </div>
+
+                <div class="chip-group strata-group">
+                  <span class="field-label">Estratos objetivo:</span>
+                  <button
+                    v-for="st in strataOptions"
+                    :key="st.code"
+                    type="button"
+                    class="territorial-chip"
+                    :class="{ active: territorial.targetStrata.includes(st.code) }"
+                    @click="toggleStratum(st.code)"
+                  >
+                    {{ st.label }}
+                  </button>
+                </div>
+
+                <div class="territorial-toggles">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="territorial.useOfficialSources" />
+                    <span>Fuentes oficiales (DANE / MinTIC / Superfinanciera)</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="territorial.useLiveWeb" />
+                    <span>Investigación web en vivo</span>
+                  </label>
+                </div>
+
+                <!-- Brief V3: Mecanismo de ingreso y Consentimientos (Anexo A) -->
+                <div class="v3-brief-box" style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #e2e8f0;">
+                  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+                    <span class="field-label">Modelo de ingreso:</span>
+                    <select v-model="v3Brief.revenueMechanism" style="padding:4px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px;">
+                      <option value="tarifa_fija">Tarifa fija por servicio</option>
+                      <option value="suscripcion">Suscripción mensual/anual</option>
+                      <option value="comision_pct">Comisión % por transacción</option>
+                      <option value="freemium">Freemium</option>
+                      <option value="uso">Por uso / consumo</option>
+                      <option value="exito">Honorario de éxito</option>
+                      <option value="mixto">Mixto</option>
+                    </select>
+                  </div>
+                  <div class="territorial-toggles">
+                    <label class="checkbox-label">
+                      <input type="checkbox" v-model="v3Brief.acceptedSynthetic" />
+                      <span>Entiendo que es una simulación sintética (no encuesta real)</span>
+                    </label>
+                    <label class="checkbox-label">
+                      <input type="checkbox" v-model="v3Brief.acceptedPrivacy" />
+                      <span>Acepto política de privacidad y no subir PII innecesaria (Ley 1581)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- -->
             <div class="console-section btn-section">
               <button 
                 class="start-engine-btn"
@@ -205,55 +324,171 @@
         </div>
       </section>
 
-      <!-- 历史项目数据库 -->
+      <!-- -->
       <HistoryDatabase />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
-import LanguageSwitcher from '../components/LanguageSwitcher.vue'
+import { getCountryPacks, getCountryCities } from '../api/graph'
+import { brandConfig } from '../config/brand.config'
+import prospecticaLogo from '../assets/logo/prospectica_logo.svg'
 
 const router = useRouter()
 
-// 表单数据
+
 const formData = ref({
   simulationRequirement: ''
 })
 
-// 文件列表
+const showTerritorial = ref(false)
+const availablePacks = ref([
+  { country_code: 'co', country_name: 'Colombia', status: 'active' },
+  { country_code: 'mx', country_name: 'México', status: 'planned' }
+])
+const availableCities = ref([
+  { divipola_code: '11001', city_name: 'Bogotá D.C.', region_macro: 'Andina Centro' },
+  { divipola_code: '05001', city_name: 'Medellín', region_macro: 'Paisa / Eje Cafetero' },
+  { divipola_code: '76001', city_name: 'Cali', region_macro: 'Pacífica' },
+  { divipola_code: '08001', city_name: 'Barranquilla', region_macro: 'Caribe' },
+  { divipola_code: '68001', city_name: 'Bucaramanga', region_macro: 'Santanderes' }
+])
+const strataOptions = [
+  { code: 'E1', label: 'E1' },
+  { code: 'E2', label: 'E2' },
+  { code: 'E3', label: 'E3' },
+  { code: 'E4', label: 'E4' },
+  { code: 'E5', label: 'E5' },
+  { code: 'E6', label: 'E6' },
+  { code: 'E0_RURAL', label: 'Rural' }
+]
+const territorial = ref({
+  countryCode: 'co',
+  targetCities: [],
+  targetStrata: ['E2', 'E3', 'E4'],
+  useOfficialSources: true,
+  useLiveWeb: false
+})
+
+const territorialSummary = computed(() => {
+  const country = territorial.value.countryCode.toUpperCase()
+  const citiesLabel = territorial.value.targetCities.length > 0
+    ? territorial.value.targetCities.slice(0, 2).join(', ')
+    : 'Todas las ciudades'
+  return `${country} · ${citiesLabel}`
+})
+
+const PRIMARY_CITY_CODES = new Set(['11001', '05001', '76001', '08001', '13001', '68001'])
+
+const selectCityGroup = (group) => {
+  if (group === 'clear') {
+    territorial.value.targetCities = []
+    return
+  }
+  if (group === 'all') {
+    territorial.value.targetCities = availableCities.value.map(c => c.city_name)
+    return
+  }
+  if (group === 'primary') {
+    const primaries = availableCities.value
+      .filter(c => PRIMARY_CITY_CODES.has(c.divipola_code) || ['Bogotá D.C.', 'Bogotá, D.C.', 'Medellín', 'Cali', 'Santiago de Cali', 'Barranquilla', 'Cartagena de Indias', 'Bucaramanga'].includes(c.city_name))
+      .map(c => c.city_name)
+    territorial.value.targetCities = [...new Set(primaries)]
+    return
+  }
+  if (group === 'secondary') {
+    const secondaries = availableCities.value
+      .filter(c => !PRIMARY_CITY_CODES.has(c.divipola_code) && !['Bogotá D.C.', 'Bogotá, D.C.', 'Medellín', 'Cali', 'Santiago de Cali', 'Barranquilla', 'Cartagena de Indias', 'Bucaramanga'].includes(c.city_name))
+      .map(c => c.city_name)
+    territorial.value.targetCities = [...new Set(secondaries)]
+  }
+}
+
+const toggleCity = (cityName) => {
+  const idx = territorial.value.targetCities.indexOf(cityName)
+  if (idx >= 0) {
+    territorial.value.targetCities.splice(idx, 1)
+  } else {
+    territorial.value.targetCities.push(cityName)
+  }
+}
+
+const addCityFromSelect = (event) => {
+  const val = event?.target?.value
+  if (val && !territorial.value.targetCities.includes(val)) {
+    territorial.value.targetCities.push(val)
+  }
+  if (event?.target) {
+    event.target.value = ''
+  }
+}
+
+const toggleStratum = (code) => {
+  const idx = territorial.value.targetStrata.indexOf(code)
+  if (idx >= 0) {
+    territorial.value.targetStrata.splice(idx, 1)
+  } else {
+    territorial.value.targetStrata.push(code)
+  }
+}
+
+onMounted(async () => {
+  try {
+    const [packsRes, citiesRes] = await Promise.all([
+      getCountryPacks(),
+      getCountryCities(territorial.value.countryCode)
+    ])
+    if (Array.isArray(packsRes?.data) && packsRes.data.length > 0) {
+      availablePacks.value = packsRes.data
+    }
+    if (Array.isArray(citiesRes?.data) && citiesRes.data.length > 0) {
+      availableCities.value = citiesRes.data
+    }
+  } catch (e) {
+    // Mantiene respaldo local compacto si el backend aún está iniciando
+  }
+})
+
+
 const files = ref([])
 
-// 状态
+
 const loading = ref(false)
 const error = ref('')
 const isDragOver = ref(false)
 
-// 文件输入引用
+
 const fileInput = ref(null)
 
-// 计算属性:是否可以提交
+
 const canSubmit = computed(() => {
-  return formData.value.simulationRequirement.trim() !== '' && files.value.length > 0
+  return formData.value.simulationRequirement.trim() !== '' && files.value.length > 0 && v3Brief.value.acceptedSynthetic && v3Brief.value.acceptedPrivacy
 })
 
-// 触发文件选择
+const v3Brief = ref({
+  revenueMechanism: 'tarifa_fija',
+  acceptedSynthetic: true,
+  acceptedPrivacy: true,
+})
+
+
 const triggerFileInput = () => {
   if (!loading.value) {
     fileInput.value?.click()
   }
 }
 
-// 处理文件选择
+
 const handleFileSelect = (event) => {
   const selectedFiles = Array.from(event.target.files)
   addFiles(selectedFiles)
 }
 
-// 处理拖拽相关
+
 const handleDragOver = (e) => {
   if (!loading.value) {
     isDragOver.value = true
@@ -272,7 +507,7 @@ const handleDrop = (e) => {
   addFiles(droppedFiles)
 }
 
-// 添加文件
+
 const addFiles = (newFiles) => {
   const validFiles = newFiles.filter(file => {
     const ext = file.name.split('.').pop().toLowerCase()
@@ -281,12 +516,12 @@ const addFiles = (newFiles) => {
   files.value.push(...validFiles)
 }
 
-// 移除文件
+
 const removeFile = (index) => {
   files.value.splice(index, 1)
 }
 
-// 滚动到底部
+
 const scrollToBottom = () => {
   window.scrollTo({
     top: document.body.scrollHeight,
@@ -294,15 +529,24 @@ const scrollToBottom = () => {
   })
 }
 
-// 开始模拟 - 立即跳转，API调用在Process页面进行
+//  - ，APIProcess
 const startSimulation = () => {
   if (!canSubmit.value || loading.value) return
   
-  // 存储待上传的数据
+
   import('../store/pendingUpload.js').then(({ setPendingUpload }) => {
-    setPendingUpload(files.value, formData.value.simulationRequirement)
+    setPendingUpload(files.value, formData.value.simulationRequirement, {
+      countryCode: territorial.value.countryCode,
+      targetCities: [...territorial.value.targetCities],
+      targetStrata: [...territorial.value.targetStrata],
+      useOfficialSources: territorial.value.useOfficialSources,
+      useLiveWeb: territorial.value.useLiveWeb,
+      revenueMechanism: v3Brief.value.revenueMechanism,
+      acceptedSynthetic: v3Brief.value.acceptedSynthetic,
+      acceptedPrivacy: v3Brief.value.acceptedPrivacy
+    })
     
-    // 立即跳转到Process页面（使用特殊标识表示新建项目）
+    // Process（）
     router.push({
       name: 'Process',
       params: { projectId: 'new' }
@@ -312,7 +556,7 @@ const startSimulation = () => {
 </script>
 
 <style scoped>
-/* 全局变量与重置 */
+/*  */
 :root {
   --black: #000000;
   --white: #FFFFFF;
@@ -321,8 +565,8 @@ const startSimulation = () => {
   --gray-text: #666666;
   --border: #E5E5E5;
   /* 
-    使用 Space Grotesk 作为主要标题字体，JetBrains Mono 作为代码/标签字体
-    确保已在 index.html 引入这些 Google Fonts 
+     Space Grotesk ，JetBrains Mono /
+     index.html  Google Fonts 
   */
   --font-mono: 'JetBrains Mono', monospace;
   --font-sans: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
@@ -336,7 +580,7 @@ const startSimulation = () => {
   color: var(--black);
 }
 
-/* 顶部导航 */
+/*  */
 .navbar {
   height: 60px;
   background: var(--black);
@@ -380,14 +624,14 @@ const startSimulation = () => {
   font-family: sans-serif;
 }
 
-/* 主要内容区 */
+/*  */
 .main-content {
   max-width: 1400px;
   margin: 0 auto;
   padding: 60px 40px;
 }
 
-/* Hero 区域 */
+/* Hero  */
 .hero-section {
   display: flex;
   justify-content: space-between;
@@ -518,7 +762,7 @@ const startSimulation = () => {
 }
 
 .hero-logo {
-  max-width: 500px; /* 调整logo大小 */
+  max-width: 500px; /* logo */
   width: 100%;
 }
 
@@ -540,7 +784,7 @@ const startSimulation = () => {
   border-color: var(--orange);
 }
 
-/* Dashboard 双栏布局 */
+/* Dashboard  */
 .dashboard-section {
   display: flex;
   gap: 60px;
@@ -555,7 +799,7 @@ const startSimulation = () => {
   flex-direction: column;
 }
 
-/* 左侧面板 */
+/*  */
 .left-panel {
   flex: 0.8;
 }
@@ -611,7 +855,7 @@ const startSimulation = () => {
   color: #999;
 }
 
-/* 项目模拟步骤介绍 */
+/*  */
 .steps-container {
   border: 1px solid var(--border);
   padding: 30px;
@@ -667,14 +911,14 @@ const startSimulation = () => {
   color: var(--gray-text);
 }
 
-/* 右侧交互控制台 */
+/*  */
 .right-panel {
   flex: 1.2;
 }
 
 .console-box {
-  border: 1px solid #CCC; /* 外部实线 */
-  padding: 8px; /* 内边距形成双重边框感 */
+  border: 1px solid #CCC; /*  */
+  padding: 8px; /*  */
 }
 
 .console-section {
@@ -842,7 +1086,7 @@ const startSimulation = () => {
   overflow: hidden;
 }
 
-/* 可点击状态（非禁用） */
+/* （） */
 .start-engine-btn:not(:disabled) {
   background: var(--black);
   border: 1px solid var(--black);
@@ -867,14 +1111,14 @@ const startSimulation = () => {
   border: 1px solid #E5E5E5;
 }
 
-/* 引导动画：微妙的边框脉冲 */
+/* ： */
 @keyframes pulse-border {
   0% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2); }
   70% { box-shadow: 0 0 0 6px rgba(0, 0, 0, 0); }
   100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
 }
 
-/* 响应式适配 */
+/*  */
 @media (max-width: 1024px) {
   .dashboard-section {
     flex-direction: column;
@@ -893,6 +1137,94 @@ const startSimulation = () => {
     max-width: 200px;
     margin-bottom: 20px;
   }
+}
+
+.territorial-section {
+  border: 1px solid #E5E5E5;
+  background: #FAFAFA;
+  padding: 12px 14px;
+}
+
+.territorial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.territorial-toggle {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #666;
+}
+
+.territorial-panel {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.territorial-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.territorial-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #555;
+}
+
+.territorial-select {
+  border: 1px solid #DDD;
+  background: #FFF;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.territorial-chip {
+  border: 1px solid #DDD;
+  background: #FFF;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.territorial-chip.active {
+  background: #000;
+  color: #FFF;
+  border-color: #000;
+}
+
+.territorial-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 0.78rem;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
 }
 </style>
 

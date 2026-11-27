@@ -1,15 +1,28 @@
 <template>
   <div class="interaction-panel">
     <!-- Main Split Layout -->
-    <div class="main-split-layout">
+    <div class="main-split-layout" ref="splitLayout">
       <!-- LEFT PANEL: Report Style -->
-      <div class="left-panel report-style" ref="leftPanel">
+      <div class="left-panel report-style" ref="leftPanel" :style="{ width: leftWidth + '%' }">
         <div v-if="reportOutline" class="report-content-wrapper">
           <!-- Report Header -->
           <div class="report-header-block">
             <div class="report-meta">
-              <span class="report-tag">Prediction Report</span>
+              <span class="report-tag">{{ $t('report.tag') || 'Informe de Predicción' }}</span>
               <span class="report-id">ID: {{ reportId || 'REF-2024-X92' }}</span>
+              <div class="report-export-actions" v-if="reportOutline">
+                <button class="export-btn" @click="downloadReportPdf" title="Descargar informe en PDF">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  Descargar PDF
+                </button>
+                <button class="export-btn export-btn-secondary" @click="downloadReportMd" title="Descargar archivo Markdown">
+                  Descargar MD
+                </button>
+              </div>
             </div>
             <h1 class="main-title">{{ reportOutline.title }}</h1>
             <p class="sub-title">{{ reportOutline.summary }}</p>
@@ -72,9 +85,18 @@
             <div class="waiting-ring"></div>
             <div class="waiting-ring"></div>
           </div>
-          <span class="waiting-text">Waiting for Report Agent...</span>
+          <span class="waiting-text">{{ $t('step4.waitingForReportAgent') }}</span>
         </div>
       </div>
+
+      <!-- Divisor arrastrable -->
+      <div
+        class="split-resizer"
+        :class="{ dragging: isResizing }"
+        title="Arrastra para redimensionar · doble clic para restablecer"
+        @mousedown.prevent="startResize"
+        @dblclick="leftWidth = 45; saveSplit()"
+      ></div>
 
       <!-- RIGHT PANEL: Interaction Interface -->
       <div class="right-panel" ref="rightPanel">
@@ -142,6 +164,34 @@
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
               </svg>
               <span>{{ $t('step5.sendSurvey') }}</span>
+            </button>
+            <button
+              class="tab-pill"
+              :class="{ active: activeTab === 'orkas' }"
+              @click="activeTab = 'orkas'"
+            >
+              <span>Enjambre Orkas</span>
+            </button>
+            <button
+              class="tab-pill"
+              :class="{ active: activeTab === 'focus_group' }"
+              @click="activeTab = 'focus_group'"
+            >
+              <span>Focus Group</span>
+            </button>
+            <button
+              class="tab-pill"
+              :class="{ active: activeTab === 'whatsapp' }"
+              @click="activeTab = 'whatsapp'"
+            >
+              <span>WhatsApp 1-a-1</span>
+            </button>
+            <button
+              class="tab-pill"
+              :class="{ active: activeTab === 'structured_survey' }"
+              @click="activeTab = 'structured_survey'"
+            >
+              <span>Encuesta N=300</span>
             </button>
           </div>
         </div>
@@ -266,11 +316,14 @@
               <div class="message-content">
                 <div class="message-header">
                   <span class="sender-name">
-                    {{ msg.role === 'user' ? 'You' : (chatTarget === 'report_agent' ? 'Report Agent' : (selectedAgent?.username || 'Agent')) }}
+                    {{ msg.role === 'user' ? 'Tú' : (chatTarget === 'report_agent' ? 'Agente de informes' : (selectedAgent?.username || 'Agente')) }}
                   </span>
                   <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
                 </div>
                 <div class="message-text" v-html="renderMarkdown(msg.content)"></div>
+                <div v-if="msg.attachments?.length" class="msg-attachments">
+                  <span v-for="(a, ai) in msg.attachments" :key="ai" class="attached-chip">📎 {{ a }}</span>
+                </div>
               </div>
             </div>
             <div v-if="isSending" class="chat-message assistant">
@@ -288,7 +341,50 @@
           </div>
 
           <!-- Chat Input -->
+          <div v-if="chatTarget === 'report_agent' && attachedFiles.length" class="attached-chips">
+            <span v-for="(f, i) in attachedFiles" :key="i" class="attached-chip">
+              📎 {{ f.name }}
+              <button class="chip-remove" @click="removeAttachment(i)" title="Quitar">×</button>
+            </span>
+          </div>
+          <div class="chat-mode-bar" style="display:flex; gap:8px; padding:8px 16px 0; flex-wrap:wrap; border-top:1px solid #f1f5f9; background:#ffffff;">
+            <button
+              type="button"
+              class="tab-pill"
+              :class="{ active: interactionMode === 'devils_advocate' }"
+              @click="interactionMode = interactionMode === 'devils_advocate' ? 'normal' : 'devils_advocate'"
+            >
+              Abogado del diablo
+            </button>
+            <button
+              type="button"
+              class="tab-pill"
+              :class="{ active: interactionMode === 'skeptic_client' }"
+              @click="interactionMode = interactionMode === 'skeptic_client' ? 'normal' : 'skeptic_client'"
+            >
+              Cliente escéptico
+            </button>
+          </div>
           <div class="chat-input-area">
+            <input
+              ref="fileInputRef"
+              type="file"
+              multiple
+              accept=".pdf,.md,.markdown,.txt,.csv,.json"
+              style="display:none"
+              @change="onFilesSelected"
+            />
+            <button
+              v-if="chatTarget === 'report_agent'"
+              class="attach-btn"
+              title="Adjuntar archivos (PDF, MD, TXT, CSV, JSON)"
+              :disabled="isSending"
+              @click="fileInputRef?.click()"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </button>
             <textarea 
               v-model="chatInput"
               class="chat-input"
@@ -405,6 +501,20 @@
             </div>
           </div>
         </div>
+
+        <!-- Vistas Multiagente / Multicanal Orkas (Fase 5) -->
+        <div v-if="activeTab === 'orkas'" class="swarm-panel-wrap">
+          <OrkasConsole v-if="effectiveSimulationId" :simulation-id="effectiveSimulationId" />
+        </div>
+        <div v-if="activeTab === 'focus_group'" class="swarm-panel-wrap">
+          <FocusGroupRoom v-if="effectiveSimulationId" :simulation-id="effectiveSimulationId" />
+        </div>
+        <div v-if="activeTab === 'whatsapp'" class="swarm-panel-wrap">
+          <WhatsAppChatPanel v-if="effectiveSimulationId" :simulation-id="effectiveSimulationId" />
+        </div>
+        <div v-if="activeTab === 'structured_survey'" class="swarm-panel-wrap">
+          <StructuredSurveyTab v-if="effectiveSimulationId" :simulation-id="effectiveSimulationId" />
+        </div>
       </div>
     </div>
   </div>
@@ -413,8 +523,14 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { chatWithReport, getReport, getAgentLog } from '../api/report'
+import { chatWithReport, getReport, getAgentLog, downloadReportMarkdown, exportReportToPdf } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
+import { brandConfig } from '../config/brand.config'
+import { renderSafeMarkdown } from '../utils/markdown'
+import OrkasConsole from './swarm/OrkasConsole.vue'
+import FocusGroupRoom from './swarm/FocusGroupRoom.vue'
+import WhatsAppChatPanel from './swarm/WhatsAppChatPanel.vue'
+import StructuredSurveyTab from './swarm/StructuredSurveyTab.vue'
 
 const { t } = useI18n()
 
@@ -424,10 +540,26 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['add-log', 'update-status'])
+const resolvedSimulationId = ref(null)
+const effectiveSimulationId = computed(() => props.simulationId || resolvedSimulationId.value)
+
+const downloadReportPdf = () => {
+  exportReportToPdf({
+    reportId: props.reportId,
+    outline: reportOutline.value,
+    sections: generatedSections.value,
+    renderMarkdown
+  })
+}
+
+const downloadReportMd = () => {
+  downloadReportMarkdown(props.reportId)
+}
 
 // State
 const activeTab = ref('chat')
 const chatTarget = ref('report_agent')
+const interactionMode = ref('normal')
 const showAgentDropdown = ref(false)
 const selectedAgent = ref(null)
 const selectedAgentIndex = ref(null)
@@ -436,8 +568,48 @@ const showToolsDetail = ref(true)
 
 // Chat State
 const chatInput = ref('')
+// Divisor redimensionable entre informe y chat
+const splitLayout = ref(null)
+const leftWidth = ref(
+  Number(localStorage.getItem(brandConfig.storageKeys.splitLeft) ?? localStorage.getItem(brandConfig.storageKeys.legacySplitLeft)) || 45
+)
+const isResizing = ref(false)
+const saveSplit = () => localStorage.setItem(brandConfig.storageKeys.splitLeft, String(leftWidth.value))
+const onResizeMove = (e) => {
+  if (!isResizing.value || !splitLayout.value) return
+  const rect = splitLayout.value.getBoundingClientRect()
+  const pct = ((e.clientX - rect.left) / rect.width) * 100
+  leftWidth.value = Math.min(80, Math.max(20, pct))
+}
+const stopResize = () => {
+  if (!isResizing.value) return
+  isResizing.value = false
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('mousemove', onResizeMove)
+  window.removeEventListener('mouseup', stopResize)
+  saveSplit()
+}
+const startResize = () => {
+  isResizing.value = true
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', onResizeMove)
+  window.addEventListener('mouseup', stopResize)
+}
+onUnmounted(stopResize)
+const attachedFiles = ref([])
+const fileInputRef = ref(null)
+const onFilesSelected = (e) => {
+  const files = Array.from(e.target.files || [])
+  const tooBig = files.filter(f => f.size > 15 * 1024 * 1024)
+  if (tooBig.length) window.alert('Algunos archivos superan 15 MB y se omitieron.')
+  attachedFiles.value = [...attachedFiles.value, ...files.filter(f => f.size <= 15 * 1024 * 1024)].slice(0, 5)
+  e.target.value = ''
+}
+const removeAttachment = (i) => { attachedFiles.value.splice(i, 1) }
 const chatHistory = ref([])
-const chatHistoryCache = ref({}) // 缓存所有对话记录: { 'report_agent': [], 'agent_0': [], 'agent_1': [], ... }
+const chatHistoryCache = ref({}) // : { 'report_agent': [], 'agent_0': [], 'agent_1': [], ... }
 const isSending = ref(false)
 const chatMessages = ref(null)
 const chatInputRef = ref(null)
@@ -487,7 +659,7 @@ const selectChatTarget = (target) => {
   }
 }
 
-// 保存当前对话记录到缓存
+
 const saveChatHistory = () => {
   if (chatHistory.value.length === 0) return
   
@@ -499,7 +671,7 @@ const saveChatHistory = () => {
 }
 
 const selectReportAgentChat = () => {
-  // 保存当前对话记录
+
   saveChatHistory()
   
   activeTab.value = 'chat'
@@ -508,7 +680,7 @@ const selectReportAgentChat = () => {
   selectedAgentIndex.value = null
   showAgentDropdown.value = false
   
-  // 恢复 Report Agent 的对话记录
+  //  Report Agent
   chatHistory.value = chatHistoryCache.value['report_agent'] || []
 }
 
@@ -528,7 +700,7 @@ const toggleAgentDropdown = () => {
 }
 
 const selectAgent = (agent, idx) => {
-  // 保存当前对话记录
+
   saveChatHistory()
   
   selectedAgent.value = agent
@@ -536,7 +708,7 @@ const selectAgent = (agent, idx) => {
   chatTarget.value = 'agent'
   showAgentDropdown.value = false
   
-  // 恢复该 Agent 的对话记录
+  //  Agent
   chatHistory.value = chatHistoryCache.value[`agent_${idx}`] || []
   addLog(t('log.selectChatTarget', { name: agent.username }))
 }
@@ -554,104 +726,28 @@ const formatTime = (timestamp) => {
   }
 }
 
-const renderMarkdown = (content) => {
-  if (!content) return ''
-  
-  let processedContent = content.replace(/^##\s+.+\n+/, '')
-  let html = processedContent.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
-  html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-  html = html.replace(/^#### (.+)$/gm, '<h5 class="md-h5">$1</h5>')
-  html = html.replace(/^### (.+)$/gm, '<h4 class="md-h4">$1</h4>')
-  html = html.replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>')
-  html = html.replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
-  html = html.replace(/^> (.+)$/gm, '<blockquote class="md-quote">$1</blockquote>')
-  
-  // 处理列表 - 支持子列表
-  html = html.replace(/^(\s*)- (.+)$/gm, (match, indent, text) => {
-    const level = Math.floor(indent.length / 2)
-    return `<li class="md-li" data-level="${level}">${text}</li>`
-  })
-  html = html.replace(/^(\s*)(\d+)\. (.+)$/gm, (match, indent, num, text) => {
-    const level = Math.floor(indent.length / 2)
-    return `<li class="md-oli" data-level="${level}">${text}</li>`
-  })
-  
-  // 包装无序列表
-  html = html.replace(/(<li class="md-li"[^>]*>.*?<\/li>\s*)+/g, '<ul class="md-ul">$&</ul>')
-  // 包装有序列表
-  html = html.replace(/(<li class="md-oli"[^>]*>.*?<\/li>\s*)+/g, '<ol class="md-ol">$&</ol>')
-  
-  // 清理列表项之间的所有空白
-  html = html.replace(/<\/li>\s+<li/g, '</li><li')
-  // 清理列表开始标签后的空白
-  html = html.replace(/<ul class="md-ul">\s+/g, '<ul class="md-ul">')
-  html = html.replace(/<ol class="md-ol">\s+/g, '<ol class="md-ol">')
-  // 清理列表结束标签前的空白
-  html = html.replace(/\s+<\/ul>/g, '</ul>')
-  html = html.replace(/\s+<\/ol>/g, '</ol>')
-  
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-  html = html.replace(/_(.+?)_/g, '<em>$1</em>')
-  html = html.replace(/^---$/gm, '<hr class="md-hr">')
-  html = html.replace(/\n\n/g, '</p><p class="md-p">')
-  html = html.replace(/\n/g, '<br>')
-  html = '<p class="md-p">' + html + '</p>'
-  html = html.replace(/<p class="md-p"><\/p>/g, '')
-  html = html.replace(/<p class="md-p">(<h[2-5])/g, '$1')
-  html = html.replace(/(<\/h[2-5]>)<\/p>/g, '$1')
-  html = html.replace(/<p class="md-p">(<ul|<ol|<blockquote|<pre|<hr)/g, '$1')
-  html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
-  // 清理块级元素前后的 <br> 标签
-  html = html.replace(/<br>\s*(<ul|<ol|<blockquote)/g, '$1')
-  html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>)\s*<br>/g, '$1')
-  // 清理 <p><br> 紧跟块级元素的情况（多余空行导致）
-  html = html.replace(/<p class="md-p">(<br>\s*)+(<ul|<ol|<blockquote|<pre|<hr)/g, '$2')
-  // 清理连续的 <br> 标签
-  html = html.replace(/(<br>\s*){2,}/g, '<br>')
-  // 清理块级元素后紧跟的段落开始标签前的 <br>
-  html = html.replace(/(<\/ol>|<\/ul>|<\/blockquote>)<br>(<p|<div)/g, '$1$2')
-
-  // 修复非连续有序列表的编号：当单项 <ol> 被段落内容隔开时，保持编号递增
-  const tokens = html.split(/(<ol class="md-ol">(?:<li class="md-oli"[^>]*>[\s\S]*?<\/li>)+<\/ol>)/g)
-  let olCounter = 0
-  let inSequence = false
-  for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].startsWith('<ol class="md-ol">')) {
-      const liCount = (tokens[i].match(/<li class="md-oli"/g) || []).length
-      if (liCount === 1) {
-        olCounter++
-        if (olCounter > 1) {
-          tokens[i] = tokens[i].replace('<ol class="md-ol">', `<ol class="md-ol" start="${olCounter}">`)
-        }
-        inSequence = true
-      } else {
-        olCounter = 0
-        inSequence = false
-      }
-    } else if (inSequence) {
-      if (/<h[2-5]/.test(tokens[i])) {
-        olCounter = 0
-        inSequence = false
-      }
-    }
-  }
-  html = tokens.join('')
-
-  return html
-}
+const renderMarkdown = (content) => renderSafeMarkdown(content)
 
 // Chat Methods
 const sendMessage = async () => {
   if (!chatInput.value.trim() || isSending.value) return
   
-  const message = chatInput.value.trim()
+  const rawMsg = chatInput.value.trim()
+  const modePrefix = interactionMode.value === 'devils_advocate'
+    ? '[MODO ABOGADO DEL DIABLO — refuta el veredicto con evidencia del estudio] '
+    : interactionMode.value === 'skeptic_client'
+      ? '[MODO CLIENTE ESCÉPTICO — plantea la objeción más fuerte y responde con evidencia] '
+      : ''
+  const message = `${modePrefix}${rawMsg}`
   chatInput.value = ''
+  const filesToSend = chatTarget.value === 'report_agent' ? [...attachedFiles.value] : []
+  attachedFiles.value = []
   
   // Add user message
   chatHistory.value.push({
     role: 'user',
     content: message,
+    attachments: filesToSend.map(f => f.name),
     timestamp: new Date().toISOString()
   })
   
@@ -660,7 +756,7 @@ const sendMessage = async () => {
   
   try {
     if (chatTarget.value === 'report_agent') {
-      await sendToReportAgent(message)
+      await sendToReportAgent(message, filesToSend)
     } else {
       await sendToAgent(message)
     }
@@ -674,14 +770,27 @@ const sendMessage = async () => {
   } finally {
     isSending.value = false
     scrollToBottom()
-    // 自动保存对话记录到缓存
+
     saveChatHistory()
   }
 }
 
-const sendToReportAgent = async (message) => {
+const sendToReportAgent = async (message, files = []) => {
   addLog(t('log.sendToReportAgent', { message: message.substring(0, 50) }))
   
+  let simId = effectiveSimulationId.value
+  if (!simId && props.reportId) {
+    try {
+      const reportRes = await getReport(props.reportId)
+      if (reportRes.success && reportRes.data?.simulation_id) {
+        resolvedSimulationId.value = reportRes.data.simulation_id
+        simId = resolvedSimulationId.value
+      }
+    } catch (e) {
+      console.warn('No se pudo resolver simulation_id desde reportId:', e)
+    }
+  }
+
   // Build chat history for API
   const historyForApi = chatHistory.value
     .slice(0, -1)
@@ -692,10 +801,11 @@ const sendToReportAgent = async (message) => {
     }))
   
   const res = await chatWithReport({
-    simulation_id: props.simulationId,
+    simulation_id: simId,
+    report_id: props.reportId,
     message: message,
     chat_history: historyForApi
-  })
+  }, files)
   
   if (res.success && res.data) {
     chatHistory.value.push({
@@ -722,13 +832,15 @@ const sendToAgent = async (message) => {
     const historyContext = chatHistory.value
       .slice(0, -1)
       .slice(-6)
-      .map(msg => `${msg.role === 'user' ? '提问者' : '你'}：${msg.content}`)
+      .map(msg => `${msg.role === 'user' ? 'Pregunta' : 'Respuesta'}：${msg.content}`)
       .join('\n')
-    prompt = `以下是我们之前的对话：\n${historyContext}\n\n现在我的新问题是：${message}`
+    prompt = `A continuación está nuestra conversación previa:\n${historyContext}\n\nAhora mi nueva pregunta es:\n${message}\n\nPor favor responde estrictamente en ESPAÑOL manteniendo la personalidad y perfil de tu personaje.`
+  } else {
+    prompt = `${message}\n\n(Por favor responde estrictamente en ESPAÑOL manteniendo la personalidad y perspectiva de tu personaje).`
   }
   
   const res = await interviewAgents({
-    simulation_id: props.simulationId,
+    simulation_id: effectiveSimulationId.value,
     interviews: [{
       agent_id: selectedAgentIndex.value,
       prompt: prompt
@@ -736,17 +848,17 @@ const sendToAgent = async (message) => {
   })
   
   if (res.success && res.data) {
-    // 正确的数据路径: res.data.result.results 是一个对象字典
-    // 格式: {"twitter_0": {...}, "reddit_0": {...}} 或单平台 {"reddit_0": {...}}
+    // : res.data.result.results
+    // : {"twitter_0": {...}, "reddit_0": {...}}  {"reddit_0": {...}}
     const resultData = res.data.result || res.data
     const resultsDict = resultData.results || resultData
     
-    // 将对象字典转换为数组，优先获取 reddit 平台的回复
+    // ， reddit
     let responseContent = null
     const agentId = selectedAgentIndex.value
     
     if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
-      // 优先使用 reddit 平台回复，其次 twitter
+      //  reddit ， twitter
       const redditKey = `reddit_${agentId}`
       const twitterKey = `twitter_${agentId}`
       const agentResult = resultsDict[redditKey] || resultsDict[twitterKey] || Object.values(resultsDict)[0]
@@ -754,7 +866,7 @@ const sendToAgent = async (message) => {
         responseContent = agentResult.response || agentResult.answer
       }
     } else if (Array.isArray(resultsDict) && resultsDict.length > 0) {
-      // 兼容数组格式
+
       responseContent = resultsDict[0].response || resultsDict[0].answer
     }
     
@@ -809,30 +921,32 @@ const submitSurvey = async () => {
   addLog(t('log.sendSurvey', { count: selectedAgents.value.size }))
   
   try {
+    const rawQuestion = surveyQuestion.value.trim()
+    const spanishPrompt = `${rawQuestion}\n\n(Por favor responde estrictamente en ESPAÑOL manteniendo la perspectiva y personalidad de tu personaje).`
     const interviews = Array.from(selectedAgents.value).map(idx => ({
       agent_id: idx,
-      prompt: surveyQuestion.value.trim()
+      prompt: spanishPrompt
     }))
     
     const res = await interviewAgents({
-      simulation_id: props.simulationId,
+      simulation_id: effectiveSimulationId.value,
       interviews: interviews
     })
     
     if (res.success && res.data) {
-      // 正确的数据路径: res.data.result.results 是一个对象字典
-      // 格式: {"twitter_0": {...}, "reddit_0": {...}, "twitter_1": {...}, ...}
+      // : res.data.result.results
+      // : {"twitter_0": {...}, "reddit_0": {...}, "twitter_1": {...}, ...}
       const resultData = res.data.result || res.data
       const resultsDict = resultData.results || resultData
       
-      // 将对象字典转换为数组格式
+
       const surveyResultsList = []
       
       for (const interview of interviews) {
         const agentIdx = interview.agent_id
         const agent = profiles.value[agentIdx]
         
-        // 优先使用 reddit 平台回复，其次 twitter
+        //  reddit ， twitter
         let responseContent = t('step5.noResponse')
 
         if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
@@ -843,7 +957,7 @@ const submitSurvey = async () => {
             responseContent = agentResult.response || agentResult.answer || t('step5.noResponse')
           }
         } else if (Array.isArray(resultsDict)) {
-          // 兼容数组格式
+
           const matchedResult = resultsDict.find(r => r.agent_id === agentIdx)
           if (matchedResult) {
             responseContent = matchedResult.response || matchedResult.answer || t('step5.noResponse')
@@ -881,8 +995,24 @@ const loadReportData = async () => {
     // Get report info
     const reportRes = await getReport(props.reportId)
     if (reportRes.success && reportRes.data) {
-      // Load agent logs to get report outline and sections
-      await loadAgentLogs()
+      if (reportRes.data.simulation_id) {
+        resolvedSimulationId.value = reportRes.data.simulation_id
+        if (profiles.value.length === 0) {
+          await loadProfiles()
+        }
+      }
+      if (reportRes.data.outline?.sections?.length) {
+        reportOutline.value = reportRes.data.outline
+        reportRes.data.outline.sections.forEach((sec, idx) => {
+          if (sec.content) {
+            generatedSections.value[idx + 1] = sec.content
+          }
+        })
+        addLog(t('log.reportDataLoaded'))
+      } else {
+        // Fallback legado: cargar desde agent_log.jsonl si aún no hay outline estructurado
+        await loadAgentLogs()
+      }
     }
   } catch (err) {
     addLog(t('log.loadReportFailed', { error: err.message }))
@@ -915,10 +1045,11 @@ const loadAgentLogs = async () => {
 }
 
 const loadProfiles = async () => {
-  if (!props.simulationId) return
+  const simId = effectiveSimulationId.value
+  if (!simId) return
   
   try {
-    const res = await getSimulationProfilesRealtime(props.simulationId)
+    const res = await getSimulationProfilesRealtime(simId)
     if (res.success && res.data) {
       profiles.value = res.data.profiles || []
       addLog(t('log.loadedProfiles', { count: profiles.value.length }))
@@ -983,16 +1114,30 @@ watch(() => props.simulationId, (newId) => {
   overflow: hidden;
 }
 
-/* Left Panel - Report Style (与 Step4Report.vue 完全一致) */
+/* Left Panel - Report Style ( Step4Report.vue ) */
 .left-panel.report-style {
   width: 45%;
-  min-width: 450px;
+  min-width: 260px;
+  flex-shrink: 0;
   background: #FFFFFF;
-  border-right: 1px solid #E5E7EB;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 30px 50px 60px 50px;
+  padding: 30px 40px 60px 40px;
+}
+
+.split-resizer {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: #E5E7EB;
+  border-left: 2px solid #FFFFFF;
+  border-right: 2px solid #FFFFFF;
+  transition: background 0.15s ease;
+}
+.split-resizer:hover,
+.split-resizer.dragging {
+  background: #1F2937;
 }
 
 .left-panel::-webkit-scrollbar {
@@ -1033,6 +1178,43 @@ watch(() => props.simulationId, (newId) => {
   align-items: center;
   gap: 12px;
   margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.report-export-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #111827;
+  color: #FFFFFF;
+  border: 1px solid #111827;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-btn:hover {
+  background: #374151;
+}
+
+.export-btn-secondary {
+  background: #FFFFFF;
+  color: #111827;
+  border: 1px solid #D1D5DB;
+}
+
+.export-btn-secondary:hover {
+  background: #F3F4F6;
 }
 
 .report-tag {
@@ -1305,6 +1487,7 @@ watch(() => props.simulationId, (newId) => {
 /* Right Panel - Interaction */
 .right-panel {
   flex: 1;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
   background: #FFFFFF;
@@ -1316,10 +1499,11 @@ watch(() => props.simulationId, (newId) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
   border-bottom: 1px solid #E5E7EB;
   background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%);
-  gap: 16px;
+  gap: 10px;
 }
 
 .action-bar-header {
@@ -1359,6 +1543,7 @@ watch(() => props.simulationId, (newId) => {
 .action-bar-tabs {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   flex: 1;
   justify-content: flex-end;
@@ -1368,7 +1553,7 @@ watch(() => props.simulationId, (newId) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
   color: #6B7280;
@@ -1408,7 +1593,7 @@ watch(() => props.simulationId, (newId) => {
 }
 
 .agent-pill {
-  width: 200px;
+  width: 180px;
   justify-content: space-between;
 }
 
@@ -1973,10 +2158,17 @@ watch(() => props.simulationId, (newId) => {
 }
 
 .message-content {
-  max-width: 70%;
+  max-width: 78%;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+}
+
+.chat-message.assistant .message-content {
+  flex: 1;
+  max-width: calc(100% - 48px);
+  width: 100%;
 }
 
 .chat-message.user .message-content {
@@ -2019,19 +2211,113 @@ watch(() => props.simulationId, (newId) => {
 
 .chat-message.assistant .message-text {
   background: #F3F4F6;
-  color: #374151;
+  color: #1F2937;
+  border: 1px solid #E5E7EB;
   border-bottom-left-radius: 4px;
+  padding: 14px 18px;
+  line-height: 1.65;
+  width: 100%;
+  overflow-x: auto;
 }
 
 .message-text :deep(.md-p) {
-  margin: 0;
+  margin: 0 0 10px 0;
 }
 
 .message-text :deep(.md-p:last-child) {
   margin-bottom: 0;
 }
 
-/* 修复有序列表编号 - 使用 CSS 计数器让多个 ol 连续编号 */
+.message-text :deep(.md-h2),
+.message-text :deep(.md-h3),
+.message-text :deep(.md-h4),
+.message-text :deep(.md-h5) {
+  color: #111827;
+  font-weight: 700;
+  margin: 14px 0 8px 0;
+  line-height: 1.35;
+}
+.message-text :deep(.md-h2:first-child),
+.message-text :deep(.md-h3:first-child),
+.message-text :deep(.md-h4:first-child),
+.message-text :deep(.md-h5:first-child) {
+  margin-top: 0;
+}
+.message-text :deep(.md-h3) { font-size: 16px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+.message-text :deep(.md-h4) { font-size: 15px; }
+.message-text :deep(.md-h5) { font-size: 14px; color: #374151; }
+
+.message-text :deep(.md-quote) {
+  border-left: 3px solid #4B5563;
+  background: #FFFFFF;
+  padding: 8px 12px;
+  margin: 10px 0;
+  border-radius: 0 6px 6px 0;
+  color: #374151;
+  font-style: italic;
+}
+
+.message-text :deep(.md-table-wrap),
+.generated-content :deep(.md-table-wrap) {
+  width: 100%;
+  overflow-x: auto;
+  margin: 12px 0;
+  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.message-text :deep(.md-table),
+.generated-content :deep(.md-table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1F2937;
+}
+
+.message-text :deep(.md-table th),
+.generated-content :deep(.md-table th) {
+  background: #1F2937;
+  color: #FFFFFF;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  border-right: 1px solid #374151;
+  white-space: nowrap;
+}
+
+.message-text :deep(.md-table th:last-child),
+.generated-content :deep(.md-table th:last-child) {
+  border-right: none;
+}
+
+.message-text :deep(.md-table td),
+.generated-content :deep(.md-table td) {
+  padding: 10px 14px;
+  border-top: 1px solid #E5E7EB;
+  border-right: 1px solid #E5E7EB;
+  vertical-align: top;
+  min-width: 110px;
+}
+
+.message-text :deep(.md-table td:last-child),
+.generated-content :deep(.md-table td:last-child) {
+  border-right: none;
+}
+
+.message-text :deep(.md-table tbody tr:nth-child(even)),
+.generated-content :deep(.md-table tbody tr:nth-child(even)) {
+  background: #F9FAFB;
+}
+
+.message-text :deep(.md-table tbody tr:hover),
+.generated-content :deep(.md-table tbody tr:hover) {
+  background: #F3F4F6;
+}
+
+/*  -  CSS  ol  */
 .message-text {
   counter-reset: list-counter;
 }
@@ -2057,7 +2343,7 @@ watch(() => props.simulationId, (newId) => {
   flex-shrink: 0;
 }
 
-/* 无序列表样式 */
+/*  */
 .message-text :deep(.md-ul) {
   padding-left: 20px;
   margin: 8px 0;
@@ -2095,6 +2381,56 @@ watch(() => props.simulationId, (newId) => {
 }
 
 /* Chat Input */
+.attached-chips, .msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.attached-chips {
+  padding: 8px 24px 0;
+  border-top: 1px solid #E5E7EB;
+}
+.msg-attachments { margin-top: 6px; }
+.attached-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #374151;
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-remove {
+  border: none;
+  background: transparent;
+  color: #9CA3AF;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.chip-remove:hover { color: #DC2626; }
+.attach-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  background: #F3F4F6;
+  color: #374151;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.attach-btn:hover:not(:disabled) { background: #E5E7EB; }
+.attach-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .chat-input-area {
   padding: 16px 24px;
   border-top: 1px solid #E5E7EB;
@@ -2128,6 +2464,7 @@ watch(() => props.simulationId, (newId) => {
 .send-btn {
   width: 44px;
   height: 44px;
+  flex-shrink: 0;
   background: #1F2937;
   color: #FFFFFF;
   border: none;
@@ -2536,7 +2873,7 @@ watch(() => props.simulationId, (newId) => {
   margin: 6px 0;
 }
 
-/* 聊天/问卷区域的引用样式 */
+/* / */
 .chat-messages :deep(.md-quote),
 .result-answer :deep(.md-quote) {
   margin: 12px 0;
@@ -2573,6 +2910,12 @@ watch(() => props.simulationId, (newId) => {
   border: none;
   border-top: 1px solid #E5E7EB;
   margin: 24px 0;
+}
+
+.swarm-panel-wrap {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
 }
 </style>
 

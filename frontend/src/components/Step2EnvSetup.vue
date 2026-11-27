@@ -1,7 +1,7 @@
 <template>
   <div class="env-setup-panel">
     <div class="scroll-container">
-      <!-- Step 01: 模拟实例 -->
+      <!-- Step 01: -->
       <div class="step-card" :class="{ 'active': phase === 0, 'completed': phase > 0 }">
         <div class="card-header">
           <div class="step-info">
@@ -22,26 +22,26 @@
 
           <div v-if="simulationId" class="info-card">
             <div class="info-row">
-              <span class="info-label">Project ID</span>
+              <span class="info-label">ID del Proyecto</span>
               <span class="info-value mono">{{ projectData?.project_id }}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Graph ID</span>
+              <span class="info-label">ID del Grafo</span>
               <span class="info-value mono">{{ projectData?.graph_id }}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Simulation ID</span>
+              <span class="info-label">ID de Simulación</span>
               <span class="info-value mono">{{ simulationId }}</span>
             </div>
             <div class="info-row">
-              <span class="info-label">Task ID</span>
+              <span class="info-label">ID de Tarea</span>
               <span class="info-value mono">{{ taskId || $t('step2.asyncTaskDone') }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Step 02: 生成 Agent 人设 -->
+      <!-- Step 02: Agent -->
       <div class="step-card" :class="{ 'active': phase === 1, 'completed': phase > 1 }">
         <div class="card-header">
           <div class="step-info">
@@ -77,6 +77,19 @@
             </div>
           </div>
 
+          <!-- Auditoría Demográfica de la Muestra (Colombia/LATAM) -->
+          <div v-if="profiles.length > 0 && demographicSummary.hasTerritorialData" class="demographic-audit-box">
+            <div class="audit-header">
+              <span class="preview-title">Auditoría Demográfica de la Muestra</span>
+              <span class="audit-badge">{{ simulationConfig?.time_config?.timezone || 'America/Bogota' }} ({{ simulationConfig?.time_config?.utc_offset || 'UTC-5' }})</span>
+            </div>
+            <div class="audit-metrics">
+              <span class="audit-pill">Escépticos / Críticos: <strong>{{ demographicSummary.skepticCriticalPct }}%</strong></span>
+              <span class="audit-pill">Ciudades: <strong>{{ demographicSummary.topCitiesText }}</strong></span>
+              <span class="audit-pill">Estratos: <strong>{{ demographicSummary.topStrataText }}</strong></span>
+            </div>
+          </div>
+
           <!-- Profiles List Preview -->
           <div v-if="profiles.length > 0" class="profiles-preview">
             <div class="preview-header">
@@ -96,6 +109,13 @@
                 <div class="profile-meta">
                   <span class="profile-profession">{{ profile.profession || $t('step2.unknownProfession') }}</span>
                 </div>
+                <div v-if="profile.city_name || profile.stratum_code || profile.attitude_segment" class="profile-demo-tags">
+                  <span v-if="profile.city_name" class="demo-tag">{{ profile.city_name }}</span>
+                  <span v-if="profile.stratum_code" class="demo-tag">{{ profile.stratum_code }}</span>
+                  <span v-if="profile.attitude_segment" class="demo-tag" :class="`att-${profile.attitude_segment}`">
+                    {{ formatAttitudeLabel(profile.attitude_segment) }}
+                  </span>
+                </div>
                 <p class="profile-bio">{{ profile.bio || $t('step2.noBio') }}</p>
                 <div v-if="profile.interested_topics?.length" class="profile-topics">
                   <span 
@@ -113,7 +133,7 @@
         </div>
       </div>
 
-      <!-- Step 03: 生成双平台模拟配置 -->
+      <!-- Step 03: -->
       <div class="step-card" :class="{ 'active': phase === 2, 'completed': phase > 2 }">
         <div class="card-header">
           <div class="step-info">
@@ -135,7 +155,7 @@
           
           <!-- Config Preview -->
           <div v-if="simulationConfig" class="config-detail-panel">
-            <!-- 时间配置 -->
+            <!-- -->
             <div class="config-block">
               <div class="config-grid">
                 <div class="config-item">
@@ -179,7 +199,7 @@
               </div>
             </div>
 
-            <!-- Agent 配置 -->
+            <!-- Agent -->
             <div class="config-block">
               <div class="config-block-header">
                 <span class="config-block-title">{{ $t('step2.agentConfig') }}</span>
@@ -191,7 +211,7 @@
                   :key="agent.agent_id" 
                   class="agent-card"
                 >
-                  <!-- 卡片头部 -->
+                  <!-- -->
                   <div class="agent-card-header">
                     <div class="agent-identity">
                       <span class="agent-id">Agent {{ agent.agent_id }}</span>
@@ -203,7 +223,7 @@
                     </div>
                   </div>
                   
-                  <!-- 活跃时间轴 -->
+                  <!-- -->
                   <div class="agent-timeline">
                     <span class="timeline-label">{{ $t('step2.activeTimePeriod') }}</span>
                     <div class="mini-timeline">
@@ -224,7 +244,7 @@
                     </div>
                   </div>
 
-                  <!-- 行为参数 -->
+                  <!-- -->
                   <div class="agent-params">
                     <div class="param-group">
                       <div class="param-item">
@@ -264,7 +284,7 @@
               </div>
             </div>
 
-            <!-- 平台配置 -->
+            <!-- -->
             <div class="config-block">
               <div class="config-block-header">
                 <span class="config-block-title">{{ $t('step2.recommendAlgoConfig') }}</span>
@@ -327,7 +347,7 @@
               </div>
             </div>
 
-            <!-- LLM 配置推理 -->
+            <!-- LLM -->
             <div v-if="simulationConfig.generation_reasoning" class="config-block">
               <div class="config-block-header">
                 <span class="config-block-title">{{ $t('step2.llmConfigReasoning') }}</span>
@@ -346,7 +366,7 @@
         </div>
       </div>
 
-      <!-- Step 04: 初始激活编排 -->
+      <!-- Step 04: -->
       <div class="step-card" :class="{ 'active': phase === 3, 'completed': phase > 3 }">
         <div class="card-header">
           <div class="step-info">
@@ -367,7 +387,7 @@
           </p>
 
           <div v-if="simulationConfig?.event_config" class="orchestration-content">
-            <!-- 叙事方向 -->
+            <!-- -->
             <div class="narrative-box">
               <span class="box-label narrative-label">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="special-icon">
@@ -385,7 +405,7 @@
               <p class="narrative-text">{{ simulationConfig.event_config.narrative_direction }}</p>
             </div>
 
-            <!-- 热点话题 -->
+            <!-- -->
             <div class="topics-section">
               <span class="box-label">{{ $t('step2.initialHotTopics') }}</span>
               <div class="hot-topics-grid">
@@ -395,7 +415,7 @@
               </div>
             </div>
 
-            <!-- 初始帖子流 -->
+            <!-- -->
             <div class="initial-posts-section">
               <span class="box-label">{{ $t('step2.initialActivationSeq', { count: simulationConfig.event_config.initial_posts.length }) }}</span>
               <div class="posts-timeline">
@@ -418,7 +438,7 @@
         </div>
       </div>
 
-      <!-- Step 05: 准备完成 -->
+      <!-- Step 05: -->
       <div class="step-card" :class="{ 'active': phase === 4 }">
         <div class="card-header">
           <div class="step-info">
@@ -435,7 +455,7 @@
           <p class="api-note">POST /api/simulation/start</p>
           <p class="description">{{ $t('step2.setupCompleteDesc') }}</p>
           
-          <!-- 模拟轮数配置 - 只有在配置生成完成且轮数计算出来后才显示 -->
+          <!-- - -->
           <div v-if="simulationConfig && autoGeneratedRounds" class="rounds-config-section">
             <div class="rounds-header">
               <div class="header-left">
@@ -544,7 +564,7 @@
         </div>
         
         <div class="modal-body">
-          <!-- 基本信息 -->
+          <!-- -->
           <div class="modal-info-grid">
             <div class="info-item">
               <span class="info-label">{{ $t('step2.profileModalAge') }}</span>
@@ -562,15 +582,31 @@
               <span class="info-label">{{ $t('step2.profileModalMbti') }}</span>
               <span class="info-value mbti">{{ selectedProfile.mbti || '-' }}</span>
             </div>
+            <div v-if="selectedProfile.city_name" class="info-item">
+              <span class="info-label">Ciudad / Territorio</span>
+              <span class="info-value">{{ selectedProfile.city_name }}<span v-if="selectedProfile.divipola_code"> ({{ selectedProfile.divipola_code }})</span></span>
+            </div>
+            <div v-if="selectedProfile.stratum_code" class="info-item">
+              <span class="info-label">Estrato e Ingreso</span>
+              <span class="info-value">{{ selectedProfile.stratum_code }} · {{ selectedProfile.income_band_local || '-' }}</span>
+            </div>
+            <div v-if="selectedProfile.attitude_segment" class="info-item">
+              <span class="info-label">Postura y Rol</span>
+              <span class="info-value">{{ formatAttitudeLabel(selectedProfile.attitude_segment) }} · {{ selectedProfile.dynamic_study_role || '-' }}</span>
+            </div>
+            <div v-if="selectedProfile.preferred_channels?.length" class="info-item">
+              <span class="info-label">Canales Preferidos</span>
+              <span class="info-value">{{ selectedProfile.preferred_channels.join(', ') }}</span>
+            </div>
           </div>
 
-          <!-- 简介 -->
+          <!-- -->
           <div class="modal-section">
             <span class="section-label">{{ $t('step2.profileModalBio') }}</span>
             <p class="section-bio">{{ selectedProfile.bio || $t('step2.noBio') }}</p>
           </div>
 
-          <!-- 关注话题 -->
+          <!-- -->
           <div class="modal-section" v-if="selectedProfile.interested_topics?.length">
             <span class="section-label">{{ $t('step2.profileModalTopics') }}</span>
             <div class="topics-grid">
@@ -582,11 +618,11 @@
             </div>
           </div>
 
-          <!-- 详细人设 -->
+          <!-- -->
           <div class="modal-section" v-if="selectedProfile.persona">
             <span class="section-label">{{ $t('step2.profileModalPersona') }}</span>
             
-            <!-- 人设维度概览 -->
+            <!-- -->
             <div class="persona-dimensions">
               <div class="dimension-card">
                 <span class="dim-title">{{ $t('step2.personaDimExperience') }}</span>
@@ -645,7 +681,7 @@ import {
 const { t } = useI18n()
 
 const props = defineProps({
-  simulationId: String,  // 从父组件传入
+  simulationId: String,
   projectData: Object,
   graphData: Object,
   systemLogs: Array
@@ -654,7 +690,7 @@ const props = defineProps({
 const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
 
 // State
-const phase = ref(0) // 0: 初始化, 1: 生成人设, 2: 生成配置, 3: 完成
+const phase = ref(0) // 0: , 1: , 2: , 3:
 const taskId = ref(null)
 const prepareProgress = ref(0)
 const currentStage = ref('')
@@ -666,43 +702,43 @@ const simulationConfig = ref(null)
 const selectedProfile = ref(null)
 const showProfilesDetail = ref(true)
 
-// 日志去重：记录上一次输出的关键信息
+// ：
 let lastLoggedMessage = ''
 let lastLoggedProfileCount = 0
 let lastLoggedConfigStage = ''
 
-// 模拟轮数配置
-const useCustomRounds = ref(false) // 默认使用自动配置轮数
-const customMaxRounds = ref(40)   // 默认推荐40轮
+
+const useCustomRounds = ref(false)
+const customMaxRounds = ref(40)   // 40
 
 // Watch stage to update phase
 watch(currentStage, (newStage) => {
-  if (newStage === '生成Agent人设' || newStage === 'generating_profiles') {
+  if (newStage === '\u751f\u6210Agent\u4eba\u8bbe' || newStage === 'generating_profiles') {
     phase.value = 1
-  } else if (newStage === '生成模拟配置' || newStage === 'generating_config') {
+  } else if (newStage === '\u751f\u6210\u6a21\u62df\u914d\u7f6e' || newStage === 'generating_config') {
     phase.value = 2
-    // 进入配置生成阶段，开始轮询配置
+    // ，
     if (!configTimer) {
       addLog(t('log.startGeneratingConfig'))
       startConfigPolling()
     }
-  } else if (newStage === '准备模拟脚本' || newStage === 'copying_scripts') {
-    phase.value = 2 // 仍属于配置阶段
+  } else if (newStage === '\u51c6\u5907\u6a21\u62df\u811a\u672c' || newStage === 'copying_scripts') {
+    phase.value = 2
   }
 })
 
-// 从配置中计算自动生成的轮数（不使用硬编码默认值）
+// （）
 const autoGeneratedRounds = computed(() => {
   if (!simulationConfig.value?.time_config) {
-    return null // 配置未生成时返回 null
+    return null //  null
   }
   const totalHours = simulationConfig.value.time_config.total_simulation_hours
   const minutesPerRound = simulationConfig.value.time_config.minutes_per_round
   if (!totalHours || !minutesPerRound) {
-    return null // 配置数据不完整时返回 null
+    return null //  null
   }
   const calculatedRounds = Math.floor((totalHours * 60) / minutesPerRound)
-  // 确保最大轮数不小于40（推荐值），避免滑动条范围异常
+  // 40（），
   return Math.max(calculatedRounds, 40)
 })
 
@@ -719,7 +755,7 @@ const displayProfiles = computed(() => {
   return profiles.value.slice(0, 6)
 })
 
-// 根据agent_id获取对应的username
+// agent_idusername
 const getAgentUsername = (agentId) => {
   if (profiles.value && profiles.value.length > agentId && agentId >= 0) {
     const profile = profiles.value[agentId]
@@ -728,11 +764,54 @@ const getAgentUsername = (agentId) => {
   return `agent_${agentId}`
 }
 
-// 计算所有人设的关联话题总数
+
 const totalTopicsCount = computed(() => {
   return profiles.value.reduce((sum, p) => {
     return sum + (p.interested_topics?.length || 0)
   }, 0)
+})
+
+const formatAttitudeLabel = (segment) => {
+  const labels = {
+    promotor: 'Promotor',
+    neutral: 'Neutral',
+    esceptico: 'Escéptico',
+    critico_hate: 'Crítico / Hate',
+    outlier: 'Atípico (Outlier)'
+  }
+  return labels[segment] || segment
+}
+
+const demographicSummary = computed(() => {
+  const withDemo = profiles.value.filter(p => p.city_name || p.stratum_code || p.attitude_segment)
+  if (withDemo.length === 0) {
+    return { hasTerritorialData: false, skepticCriticalPct: 0, topCitiesText: '-', topStrataText: '-' }
+  }
+  const cityCounts = {}
+  const strataCounts = {}
+  let skeptics = 0
+  profiles.value.forEach((p) => {
+    if (p.city_name) cityCounts[p.city_name] = (cityCounts[p.city_name] || 0) + 1
+    if (p.stratum_code) strataCounts[p.stratum_code] = (strataCounts[p.stratum_code] || 0) + 1
+    if (p.attitude_segment === 'esceptico' || p.attitude_segment === 'critico_hate') skeptics += 1
+  })
+  const topCitiesText = Object.entries(cityCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k, v]) => `${k} (${v})`)
+    .join(', ') || '-'
+  const topStrataText = Object.entries(strataCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([k, v]) => `${k} (${v})`)
+    .join(', ') || '-'
+  const skepticCriticalPct = Math.round((skeptics / Math.max(1, profiles.value.length)) * 100)
+  return {
+    hasTerritorialData: true,
+    skepticCriticalPct,
+    topCitiesText,
+    topStrataText
+  }
 })
 
 // Methods
@@ -748,17 +827,17 @@ const handlePrepareFailure = (message) => {
   emit('update-status', 'error')
 }
 
-// 处理开始模拟按钮点击
+
 const handleStartSimulation = () => {
-  // 构建传递给父组件的参数
+
   const params = {}
   
   if (useCustomRounds.value) {
-    // 用户自定义轮数，传递 max_rounds 参数
+    // ， max_rounds
     params.maxRounds = customMaxRounds.value
     addLog(t('log.startSimCustomRounds', { rounds: customMaxRounds.value }))
   } else {
-    // 用户选择保持自动生成的轮数，不传递 max_rounds 参数
+    // ， max_rounds
     addLog(t('log.startSimAutoRounds', { rounds: autoGeneratedRounds.value }))
   }
   
@@ -776,7 +855,7 @@ const selectProfile = (profile) => {
   selectedProfile.value = profile
 }
 
-// 自动开始准备模拟
+
 const startPrepareSimulation = async () => {
   if (!props.simulationId) {
     addLog(t('log.errorMissingSimId'))
@@ -784,7 +863,7 @@ const startPrepareSimulation = async () => {
     return
   }
   
-  // 标记第一步完成，开始第二步
+  // ，
   phase.value = 1
   addLog(t('log.simInstanceCreated', { id: props.simulationId }))
   addLog(t('log.preparingSimEnv'))
@@ -808,7 +887,7 @@ const startPrepareSimulation = async () => {
       addLog(t('log.prepareTaskStarted'))
       addLog(t('log.prepareTaskId', { taskId: res.data.task_id }))
       
-      // 立即设置预期Agent总数（从prepare接口返回值获取）
+      // Agent（prepare）
       if (res.data.expected_entities_count) {
         expectedTotal.value = res.data.expected_entities_count
         addLog(t('log.zepEntitiesFound', { count: res.data.expected_entities_count }))
@@ -818,9 +897,9 @@ const startPrepareSimulation = async () => {
       }
       
       addLog(t('log.startPollingProgress'))
-      // 开始轮询进度
+
       startPolling()
-      // 开始实时获取 Profiles
+      //  Profiles
       startProfilesPolling()
     } else {
       addLog(t('log.prepareFailed', { error: res.error || t('common.unknownError') }))
@@ -866,15 +945,15 @@ const pollPrepareStatus = async () => {
     if (res.success && res.data) {
       const data = res.data
       
-      // 更新进度
+
       prepareProgress.value = data.progress || 0
       progressMessage.value = data.message || ''
       
-      // 解析阶段信息并输出详细日志
+
       if (data.progress_detail) {
         currentStage.value = data.progress_detail.current_stage_name || ''
         
-        // 输出详细进度日志（避免重复）
+        // （）
         const detail = data.progress_detail
         const logKey = `${detail.current_stage}-${detail.current_item}-${detail.total_items}`
         if (logKey !== lastLoggedMessage && detail.item_description) {
@@ -887,19 +966,19 @@ const pollPrepareStatus = async () => {
           }
         }
       } else if (data.message) {
-        // 从消息中提取阶段
+
         const match = data.message.match(/\[(\d+)\/(\d+)\]\s*([^:]+)/)
         if (match) {
           currentStage.value = match[3].trim()
         }
-        // 输出消息日志（避免重复）
+        // （）
         if (data.message !== lastLoggedMessage) {
           lastLoggedMessage = data.message
           addLog(data.message)
         }
       }
       
-      // 检查是否完成
+
       if (data.status === 'completed' || data.status === 'ready' || data.already_prepared) {
         addLog(t('log.prepareComplete'))
         stopPolling()
@@ -910,7 +989,7 @@ const pollPrepareStatus = async () => {
       }
     }
   } catch (err) {
-    console.warn('轮询状态失败:', err)
+    console.warn('\u8f6e\u8be2\u72b6\u6001\u5931\u8d25:', err)
   }
 }
 
@@ -923,19 +1002,19 @@ const fetchProfilesRealtime = async () => {
     if (res.success && res.data) {
       const prevCount = profiles.value.length
       profiles.value = res.data.profiles || []
-      // 只有当 API 返回有效值时才更新，避免覆盖已有的有效值
+      //  API ，
       if (res.data.total_expected) {
         expectedTotal.value = res.data.total_expected
       }
       
-      // 提取实体类型
+
       const types = new Set()
       profiles.value.forEach(p => {
         if (p.entity_type) types.add(p.entity_type)
       })
       entityTypes.value = Array.from(types)
       
-      // 输出 Profile 生成进度日志（仅当数量变化时）
+      //  Profile （）
       const currentCount = profiles.value.length
       if (currentCount > 0 && currentCount !== lastLoggedProfileCount) {
         lastLoggedProfileCount = currentCount
@@ -947,18 +1026,18 @@ const fetchProfilesRealtime = async () => {
         }
         addLog(t('log.agentProfile', { current: currentCount, total: total, name: profileName, profession: latestProfile?.profession || t('step2.unknownProfession') }))
 
-        // 如果全部生成完成
+
         if (expectedTotal.value && currentCount >= expectedTotal.value) {
           addLog(t('log.allProfilesComplete', { count: currentCount }))
         }
       }
     }
   } catch (err) {
-    console.warn('获取 Profiles 失败:', err)
+    console.warn('\u83b7\u53d6 Profiles \u5931\u8d25:', err)
   }
 }
 
-// 配置轮询
+
 const startConfigPolling = () => {
   configTimer = setInterval(fetchConfigRealtime, 2000)
 }
@@ -984,7 +1063,7 @@ const fetchConfigRealtime = async () => {
         return
       }
       
-      // 输出配置生成阶段日志（避免重复）
+      // （）
       if (data.generation_stage && data.generation_stage !== lastLoggedConfigStage) {
         lastLoggedConfigStage = data.generation_stage
         if (data.generation_stage === 'generating_profiles') {
@@ -994,12 +1073,12 @@ const fetchConfigRealtime = async () => {
         }
       }
       
-      // 如果配置已生成
+
       if (data.config_generated && data.config) {
         simulationConfig.value = data.config
         addLog(t('log.configComplete'))
 
-        // 显示详细配置摘要
+
         if (data.summary) {
           addLog(t('log.configSummaryAgents', { count: data.summary.total_agents }))
           addLog(t('log.configSummaryHours', { hours: data.summary.simulation_hours }))
@@ -1008,13 +1087,13 @@ const fetchConfigRealtime = async () => {
           addLog(t('log.configSummaryPlatforms', { twitter: data.summary.has_twitter_config ? '✓' : '✗', reddit: data.summary.has_reddit_config ? '✓' : '✗' }))
         }
         
-        // 显示时间配置详情
+
         if (data.config.time_config) {
           const tc = data.config.time_config
           addLog(t('log.timeConfigDetail', { minutes: tc.minutes_per_round, rounds: Math.floor((tc.total_simulation_hours * 60) / tc.minutes_per_round) }))
         }
         
-        // 显示事件配置
+
         if (data.config.event_config?.narrative_direction) {
           const narrative = data.config.event_config.narrative_direction
           addLog(t('log.narrativeDirection', { direction: narrative.length > 50 ? narrative.substring(0, 50) + '...' : narrative }))
@@ -1027,7 +1106,7 @@ const fetchConfigRealtime = async () => {
       }
     }
   } catch (err) {
-    console.warn('获取 Config 失败:', err)
+    console.warn('\u83b7\u53d6 Config \u5931\u8d25:', err)
   }
 }
 
@@ -1035,11 +1114,11 @@ const loadPreparedData = async () => {
   phase.value = 2
   addLog(t('log.loadingExistingConfig'))
 
-  // 最后获取一次 Profiles
+  //  Profiles
   await fetchProfilesRealtime()
   addLog(t('log.loadedAgentProfiles', { count: profiles.value.length }))
 
-  // 获取配置（使用实时接口）
+  // （）
   try {
     const res = await getSimulationConfigRealtime(props.simulationId)
     if (res.success && res.data) {
@@ -1054,7 +1133,7 @@ const loadPreparedData = async () => {
         simulationConfig.value = configState.config
         addLog(t('log.configLoadSuccess'))
 
-        // 显示详细配置摘要
+
         if (configState.summary) {
           addLog(t('log.configSummaryAgents', { count: configState.summary.total_agents }))
           addLog(t('log.configSummaryHours', { hours: configState.summary.simulation_hours }))
@@ -1087,7 +1166,7 @@ watch(() => props.systemLogs?.length, () => {
 })
 
 onMounted(() => {
-  // 自动开始准备流程
+
   if (props.simulationId) {
     addLog(t('log.step2Init'))
     startPrepareSimulation()
@@ -1923,7 +2002,7 @@ onUnmounted(() => {
   flex: 1;
 }
 
-/* 基本信息网格 */
+/*  */
 .modal-info-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1959,7 +2038,7 @@ onUnmounted(() => {
   color: #FF5722;
 }
 
-/* 模块区域 */
+/*  */
 .modal-section {
   margin-bottom: 28px;
 }
@@ -1985,7 +2064,7 @@ onUnmounted(() => {
   border-left: 3px solid #E0E0E0;
 }
 
-/* 话题标签 */
+/*  */
 .topics-grid {
   display: flex;
   flex-wrap: wrap;
@@ -2007,7 +2086,7 @@ onUnmounted(() => {
   color: #0D47A1;
 }
 
-/* 详细人设 */
+/*  */
 .persona-dimensions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2293,7 +2372,7 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* 模拟轮数配置样式 */
+/*  */
 .rounds-config-section {
   margin: 24px 0;
   padding-top: 24px;
@@ -2619,5 +2698,82 @@ onUnmounted(() => {
 .modal-leave-to .profile-modal {
   transform: scale(0.95) translateY(10px);
   opacity: 0;
+}
+
+.demographic-audit-box {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.audit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audit-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: #0F172A;
+  color: #FFFFFF;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.audit-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.audit-pill {
+  font-size: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: #334155;
+}
+
+.profile-demo-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.demo-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #F1F5F9;
+  color: #334155;
+}
+
+.demo-tag.att-esceptico {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.demo-tag.att-critico_hate {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.demo-tag.att-promotor {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.demo-tag.att-outlier {
+  background: #EDE9FE;
+  color: #5B21B6;
 }
 </style>

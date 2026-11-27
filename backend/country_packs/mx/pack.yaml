@@ -1,0 +1,12 @@
+country_code: "mx"
+country_name: "México"
+status: "planned"
+currency: "MXN"
+locale: "es-MX"
+timezone: "America/Mexico_City"
+min_wage_local: 8364
+transport_aid_local: 0
+min_wage_source: "Esqueleto planificado (Fase futura LATAM - INEGI/CONASAMI)"
+taxonomy_system: "NSE_AMAI"
+metadata:
+  notes: "CountryPack planificado para demostrar extensibilidad multi-país LATAM."

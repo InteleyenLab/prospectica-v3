@@ -27,17 +27,22 @@ def _ensure_utf8_stdout():
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
 
 
-def setup_logger(name: str = 'mirofish', level: int = logging.DEBUG) -> logging.Logger:
+def setup_logger(name: str = 'prospectica', level: int = logging.DEBUG) -> logging.Logger:
     """
-    设置日志器
+    Configura y devuelve el registrador de logs principal de Prospéctica Inc.
     
     Args:
-        name: 日志器名称
-        level: 日志级别
+        name: Nombre del registrador
+        level: Nivel de registro
         
     Returns:
-        配置好的日志器
+        Instancia de logging.Logger configurada
     """
+    # Normalizar cualquier nombre heredado
+    if name.startswith('mirofish'):
+        name = 'prospectica' + name[8:]
+    elif name == 'mirofish':
+        name = 'prospectica'
     # 确保日志目录存在
     os.makedirs(LOG_DIR, exist_ok=True)
     
@@ -88,16 +93,20 @@ def setup_logger(name: str = 'mirofish', level: int = logging.DEBUG) -> logging.
     return logger
 
 
-def get_logger(name: str = 'mirofish') -> logging.Logger:
+def get_logger(name: str = 'prospectica') -> logging.Logger:
     """
-    获取日志器（如果不存在则创建）
+    Obtiene o crea un registrador de Prospéctica Inc.
     
     Args:
-        name: 日志器名称
+        name: Nombre del registrador
         
     Returns:
-        日志器实例
+        Instancia de logging.Logger
     """
+    if name.startswith('mirofish'):
+        name = 'prospectica' + name[8:]
+    elif name == 'mirofish':
+        name = 'prospectica'
     logger = logging.getLogger(name)
     if not logger.handlers:
         return setup_logger(name)

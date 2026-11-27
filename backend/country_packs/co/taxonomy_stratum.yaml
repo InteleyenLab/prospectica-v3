@@ -1,0 +1,80 @@
+taxonomy_system: "CO_ESTRATO_LEY142"
+source: "DANE Estratificación Socioeconómica Ley 142/1994 + ECV + SUI / n48w-gutb"
+strata:
+  - code: "E1"
+    label: "Bajo-Bajo"
+    wealth_tier_norm: 1
+    urban_weight_pct: 17.5
+    income_smmlv_min: 0.4
+    income_smmlv_max: 1.0
+    utility_subsidy_role: "Subsidiado"
+    price_elasticity_level: "Muy Alta"
+    financial_access_profile: "Efectivo, corresponsal bancario, Nequi/Daviplata básico"
+    connectivity_mode: "Móvil prepago prioritario"
+    source_citation: "DANE ECV / Ley 142-1994 (estimación distribución urbana nacional)"
+  - code: "E2"
+    label: "Bajo"
+    wealth_tier_norm: 2
+    urban_weight_pct: 33.0
+    income_smmlv_min: 1.0
+    income_smmlv_max: 1.8
+    utility_subsidy_role: "Subsidiado"
+    price_elasticity_level: "Alta"
+    financial_access_profile: "Billeteras digitales (Nequi/Daviplata), efectivo, microcrédito"
+    connectivity_mode: "Móvil prepago/pospago básico + WiFi compartido"
+    source_citation: "DANE ECV / Ley 142-1994"
+  - code: "E3"
+    label: "Medio-Bajo"
+    wealth_tier_norm: 3
+    urban_weight_pct: 31.0
+    income_smmlv_min: 1.8
+    income_smmlv_max: 3.5
+    utility_subsidy_role: "Subsidiado (menor proporción)"
+    price_elasticity_level: "Media-Alta"
+    financial_access_profile: "Cuenta ahorros, PSE, Nequi/Daviplata, tarjeta débito/crédito cuotas"
+    connectivity_mode: "Híbrido fijo hogar + plan móvil"
+    source_citation: "DANE ECV / Ley 142-1994"
+  - code: "E4"
+    label: "Medio"
+    wealth_tier_norm: 4
+    urban_weight_pct: 10.5
+    income_smmlv_min: 3.5
+    income_smmlv_max: 6.5
+    utility_subsidy_role: "Neutro"
+    price_elasticity_level: "Media"
+    financial_access_profile: "Bancarización plena, PSE, tarjetas de crédito, comercio electrónico"
+    connectivity_mode: "Banda ancha fija estable + pospago móvil"
+    source_citation: "DANE ECV / Ley 142-1994"
+  - code: "E5"
+    label: "Medio-Alto"
+    wealth_tier_norm: 5
+    urban_weight_pct: 4.0
+    income_smmlv_min: 6.5
+    income_smmlv_max: 12.0
+    utility_subsidy_role: "Contribuyente (+20%)"
+    price_elasticity_level: "Baja"
+    financial_access_profile: "Banca preferente, múltiples tarjetas, pagos digitales sin fricción"
+    connectivity_mode: "Fibra alta velocidad + multidispositivo"
+    source_citation: "DANE ECV / Ley 142-1994"
+  - code: "E6"
+    label: "Alto"
+    wealth_tier_norm: 5
+    urban_weight_pct: 2.0
+    income_smmlv_min: 12.0
+    income_smmlv_max: 40.0
+    utility_subsidy_role: "Contribuyente (+20%)"
+    price_elasticity_level: "Muy Baja"
+    financial_access_profile: "Banca privada, seguros voluntarios, asesoría jurídica/financiera"
+    connectivity_mode: "Fibra simétrica + multidispositivo"
+    source_citation: "DANE ECV / Ley 142-1994"
+  - code: "E0_RURAL"
+    label: "Sin estrato / Rural"
+    wealth_tier_norm: 1
+    urban_weight_pct: 2.0
+    income_smmlv_min: 0.3
+    income_smmlv_max: 1.5
+    utility_subsidy_role: "Rural / Régimen especial"
+    price_elasticity_level: "Muy Alta"
+    financial_access_profile: "Efectivo, giro postal/corresponsal, billetera móvil cuando hay señal"
+    connectivity_mode: "Móvil intermitente / baja conectividad fija"
+    source_citation: "DANE / MinTIC n48w-gutb (categoría Sin estrato)"

@@ -3,7 +3,8 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">MIROFISH</div>
+        <div class="brand" @click="router.push('/')">{{ brandConfig.uppercaseName }}</div>
+        <button class="home-btn" title="Volver al inicio para crear un nuevo proyecto" @click="router.push('/')">&larr; Inicio / Nuevo proyecto</button>
       </div>
       
       <div class="header-center">
@@ -21,10 +22,8 @@
       </div>
 
       <div class="header-right">
-        <LanguageSwitcher />
-        <div class="step-divider"></div>
         <div class="workflow-step">
-          <span class="step-num">Step {{ currentStep }}/5</span>
+          <span class="step-num">{{ $t('common.step') || 'Paso' }} {{ currentStep }}/5</span>
           <span class="step-name">{{ $tm('main.stepNames')[currentStep - 1] }}</span>
         </div>
         <div class="step-divider"></div>
@@ -50,7 +49,7 @@
 
       <!-- Right Panel: Step Components -->
       <div class="panel-wrapper right" :style="rightPanelStyle">
-        <!-- Step 1: 图谱构建 -->
+        <!-- Step 1: -->
         <Step1GraphBuild 
           v-if="currentStep === 1"
           :currentPhase="currentPhase"
@@ -61,7 +60,7 @@
           :systemLogs="systemLogs"
           @next-step="handleNextStep"
         />
-        <!-- Step 2: 环境搭建 -->
+        <!-- Step 2: -->
         <Step2EnvSetup
           v-else-if="currentStep === 2"
           :projectData="projectData"
@@ -85,7 +84,7 @@ import Step1GraphBuild from '../components/Step1GraphBuild.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
-import LanguageSwitcher from '../components/LanguageSwitcher.vue'
+import { brandConfig } from '../config/brand.config'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,7 +94,7 @@ const { t, tm } = useI18n()
 const viewMode = ref('split') // graph | split | workbench
 
 // Step State
-const currentStep = ref(1) // 1: 图谱构建, 2: 环境搭建, 3: 开始模拟, 4: 报告生成, 5: 深度互动
+const currentStep = ref(1) // 1: , 2: , 3: , 4: , 5:
 const stepNames = computed(() => tm('main.stepNames'))
 
 // Data State
@@ -166,7 +165,7 @@ const handleNextStep = (params = {}) => {
     currentStep.value++
     addLog(t('log.enterStep', { step: currentStep.value, name: stepNames.value[currentStep.value - 1] }))
     
-    // 如果是从 Step 2 进入 Step 3，记录模拟轮数配置
+    //  Step 2  Step 3，
     if (currentStep.value === 3 && params.maxRounds) {
       addLog(t('log.customSimRounds', { rounds: params.maxRounds }))
     }
@@ -208,6 +207,18 @@ const handleNewProject = async () => {
     const formData = new FormData()
     pending.files.forEach(f => formData.append('files', f))
     formData.append('simulation_requirement', pending.simulationRequirement)
+    if (pending.territorialConfig) {
+      const cfg = pending.territorialConfig
+      if (cfg.countryCode) formData.append('country_code', cfg.countryCode)
+      if (Array.isArray(cfg.targetCities) && cfg.targetCities.length > 0) {
+        formData.append('target_cities', JSON.stringify(cfg.targetCities))
+      }
+      if (Array.isArray(cfg.targetStrata) && cfg.targetStrata.length > 0) {
+        formData.append('target_strata', JSON.stringify(cfg.targetStrata))
+      }
+      formData.append('use_official_sources', cfg.useOfficialSources ? 'true' : 'false')
+      formData.append('use_live_web', cfg.useLiveWeb ? 'true' : 'false')
+    }
     
     const res = await generateOntology(formData)
     if (res.success) {

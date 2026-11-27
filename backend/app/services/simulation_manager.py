@@ -51,6 +51,12 @@ class SimulationState:
     # 平台启用状态
     enable_twitter: bool = True
     enable_reddit: bool = True
+    enabled_channels: List[str] = field(default_factory=lambda: [
+        "whatsapp_1on1", "focus_group", "street_survey", "facebook_groups",
+        "tiktok", "instagram", "news_portals", "colombian_web",
+        "advertising", "tv", "radio",
+    ])
+    survey_target_n: int = 300
     
     # 状态
     status: SimulationStatus = SimulationStatus.CREATED
@@ -85,6 +91,8 @@ class SimulationState:
             "graph_id": self.graph_id,
             "enable_twitter": self.enable_twitter,
             "enable_reddit": self.enable_reddit,
+            "enabled_channels": self.enabled_channels,
+            "survey_target_n": self.survey_target_n,
             "status": self.status.value,
             "entities_count": self.entities_count,
             "profiles_count": self.profiles_count,
@@ -187,6 +195,12 @@ class SimulationManager:
             graph_id=data.get("graph_id", ""),
             enable_twitter=data.get("enable_twitter", True),
             enable_reddit=data.get("enable_reddit", True),
+            enabled_channels=data.get("enabled_channels") or [
+                "whatsapp_1on1", "focus_group", "street_survey", "facebook_groups",
+                "tiktok", "instagram", "news_portals", "colombian_web",
+                "advertising", "tv", "radio",
+            ],
+            survey_target_n=int(data.get("survey_target_n", 300)),
             status=SimulationStatus(data.get("status", "created")),
             entities_count=data.get("entities_count", 0),
             profiles_count=data.get("profiles_count", 0),
@@ -204,6 +218,42 @@ class SimulationManager:
         
         self._simulations[simulation_id] = state
         return state
+
+    def get_study_context(
+        self,
+        simulation_id: str,
+        ensure: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """Retorna el StudyContext del proyecto asociado a la simulación."""
+        state = self._load_simulation_state(simulation_id)
+        if not state or not state.project_id:
+            return None
+        from .study_context_builder import ensure_study_context, load_study_context
+
+        if ensure:
+            return ensure_study_context(state.project_id)
+        return load_study_context(state.project_id)
+
+    def get_project_name(self, simulation_id: str) -> str:
+        """Resuelve el nombre real del proyecto asociado a la simulación."""
+        state = self._load_simulation_state(simulation_id)
+        if not state or not state.project_id:
+            return "Estudio de Mercado"
+        ctx = self.get_study_context(simulation_id, ensure=True)
+        if ctx and ctx.get("project_name"):
+            return str(ctx["project_name"])
+        from ..models.project import ProjectManager
+        from .study_context_builder import extract_real_project_name
+
+        proj = ProjectManager.get_project(state.project_id)
+        if not proj:
+            return "Estudio de Mercado"
+        return extract_real_project_name(
+            extracted_text=ProjectManager.get_extracted_text(state.project_id) or "",
+            simulation_requirement=proj.simulation_requirement or "",
+            filenames=[f.get("filename", "") for f in (proj.files or []) if isinstance(f, dict)],
+            project_name_hint=proj.name,
+        )
     
     def create_simulation(
         self,
@@ -211,28 +261,28 @@ class SimulationManager:
         graph_id: str,
         enable_twitter: bool = True,
         enable_reddit: bool = True,
+        enabled_channels: Optional[List[str]] = None,
+        survey_target_n: int = 300,
     ) -> SimulationState:
         """
         创建新的模拟
-        
-        Args:
-            project_id: 项目ID
-            graph_id: Zep图谱ID
-            enable_twitter: 是否启用Twitter模拟
-            enable_reddit: 是否启用Reddit模拟
-            
-        Returns:
-            SimulationState
         """
         import uuid
         simulation_id = f"sim_{uuid.uuid4().hex[:12]}"
         
+        default_channels = [
+            "whatsapp_1on1", "focus_group", "street_survey", "facebook_groups",
+            "tiktok", "instagram", "news_portals", "colombian_web",
+            "advertising", "tv", "radio",
+        ]
         state = SimulationState(
             simulation_id=simulation_id,
             project_id=project_id,
             graph_id=graph_id,
             enable_twitter=enable_twitter,
             enable_reddit=enable_reddit,
+            enabled_channels=enabled_channels if enabled_channels is not None else default_channels,
+            survey_target_n=int(survey_target_n or 300),
             status=SimulationStatus.CREATED,
         )
         
@@ -296,11 +346,24 @@ class SimulationManager:
             if progress_callback:
                 progress_callback("reading", 30, t('progress.readingNodeData'))
             
-            filtered = reader.filter_defined_entities(
-                graph_id=state.graph_id,
-                defined_entity_types=defined_entity_types,
-                enrich_with_edges=True
-            )
+            if hasattr(reader, "fetch_simulatable_actors"):
+                filtered = reader.fetch_simulatable_actors(
+                    graph_id=state.graph_id,
+                    defined_entity_types=defined_entity_types,
+                    enrich_with_edges=True
+                )
+                if filtered.filtered_count == 0:
+                    filtered = reader.filter_defined_entities(
+                        graph_id=state.graph_id,
+                        defined_entity_types=defined_entity_types,
+                        enrich_with_edges=True
+                    )
+            else:
+                filtered = reader.filter_defined_entities(
+                    graph_id=state.graph_id,
+                    defined_entity_types=defined_entity_types,
+                    enrich_with_edges=True
+                )
             
             state.entities_count = filtered.filtered_count
             state.entity_types = list(filtered.entity_types)
@@ -330,8 +393,25 @@ class SimulationManager:
                     total=total_entities
                 )
             
+            # Cargar contexto territorial del proyecto (retrocompatible)
+            from ..models.project import ProjectManager
+            proj_ctx = ProjectManager.get_project(state.project_id)
+            try:
+                from .study_context_builder import ensure_study_context
+                ensure_study_context(state.project_id)
+            except Exception as sc_err:  # noqa: BLE001
+                logger.warning(f"No se pudo asegurar StudyContext para {state.project_id}: {sc_err}")
+            country_code = getattr(proj_ctx, "country_code", "co") if proj_ctx else "co"
+            target_cities = getattr(proj_ctx, "target_cities", None) if proj_ctx else None
+            target_strata = getattr(proj_ctx, "target_strata", None) if proj_ctx else None
+
             # 传入graph_id以启用Zep检索功能，获取更丰富的上下文
-            generator = OasisProfileGenerator(graph_id=state.graph_id)
+            generator = OasisProfileGenerator(
+                graph_id=state.graph_id,
+                country_code=country_code,
+                target_cities=target_cities,
+                target_strata=target_strata,
+            )
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -428,7 +508,10 @@ class SimulationManager:
                 document_text=document_text,
                 entities=filtered.entities,
                 enable_twitter=state.enable_twitter,
-                enable_reddit=state.enable_reddit
+                enable_reddit=state.enable_reddit,
+                country_code=country_code,
+                target_cities=target_cities,
+                target_strata=target_strata,
             )
             
             if progress_callback:
@@ -498,6 +581,33 @@ class SimulationManager:
         
         return simulations
     
+    def delete_simulation(self, simulation_id: str) -> Dict[str, Any]:
+        """Elimina la carpeta de una simulación y sus informes asociados."""
+        import re as _re
+        if not simulation_id or not _re.match(r'^sim_[A-Za-z0-9_-]+$', simulation_id):
+            raise ValueError("ID de simulación inválido")
+        sim_dir = os.path.join(self.SIMULATION_DATA_DIR, simulation_id)
+        if not os.path.isdir(sim_dir):
+            raise FileNotFoundError(f"La simulación no existe: {simulation_id}")
+        shutil.rmtree(sim_dir, ignore_errors=False)
+        self._simulations.pop(simulation_id, None)
+
+        deleted_reports = []
+        reports_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../uploads/reports'))
+        if os.path.isdir(reports_dir):
+            for rid in os.listdir(reports_dir):
+                meta = os.path.join(reports_dir, rid, 'meta.json')
+                if not os.path.isfile(meta):
+                    continue
+                try:
+                    with open(meta, 'r', encoding='utf-8') as f:
+                        if json.load(f).get('simulation_id') == simulation_id:
+                            shutil.rmtree(os.path.join(reports_dir, rid), ignore_errors=True)
+                            deleted_reports.append(rid)
+                except Exception:
+                    continue
+        return {"simulation_id": simulation_id, "deleted_reports": deleted_reports}
+
     def get_profiles(self, simulation_id: str, platform: str = None) -> List[Dict[str, Any]]:
         """获取模拟的Agent Profile"""
         state = self._load_simulation_state(simulation_id)

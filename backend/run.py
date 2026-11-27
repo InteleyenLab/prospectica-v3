@@ -1,5 +1,5 @@
 """
-MiroFish Backend 启动入口
+Prospéctica Inc. Backend - Punto de Entrada
 """
 
 import os

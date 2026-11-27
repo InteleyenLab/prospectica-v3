@@ -3,8 +3,10 @@
 采用项目上下文机制，服务端持久化状态
 """
 
+import json
 import os
 import re
+from pathlib import Path
 import traceback
 import threading
 from contextlib import ExitStack, nullcontext
@@ -15,6 +17,13 @@ from . import graph_bp
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import BatchSubmission, GraphBuilderService
+from ..services.study_context_builder import (
+    ensure_study_context,
+    extract_and_build_study_context,
+    extract_real_project_name,
+    is_placeholder_project_name,
+    load_study_context,
+)
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
 from ..utils.logger import get_logger
@@ -31,6 +40,30 @@ from ..utils.llm_client import LLMResponseError
 logger = get_logger('mirofish.api')
 _build_locks: dict[str, threading.Lock] = {}
 _build_locks_guard = threading.Lock()
+
+
+def _parse_list_form_field(raw_value: str | None) -> list[str]:
+    """Parsea un campo opcional enviado como JSON array o lista separada por comas."""
+    if not raw_value:
+        return []
+    cleaned = raw_value.strip()
+    if not cleaned:
+        return []
+    if cleaned.startswith("["):
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+    return [part.strip() for part in cleaned.split(",") if part.strip()]
+
+
+def _parse_bool_form_field(raw_value: str | None, default: bool = False) -> bool:
+    """Parsea un flag booleano de formulario."""
+    if raw_value is None or raw_value == "":
+        return default
+    return str(raw_value).strip().lower() in ("1", "true", "yes", "si", "sí", "on")
 
 
 class GraphInUseError(RuntimeError):
@@ -296,8 +329,25 @@ def generate_ontology():
         
         # 获取参数
         simulation_requirement = request.form.get('simulation_requirement', '')
-        project_name = request.form.get('project_name', 'Unnamed Project')
+        raw_project_name = (request.form.get('project_name') or '').strip()
+        project_name = raw_project_name or 'Unnamed Project'
         additional_context = request.form.get('additional_context', '')
+        country_code_raw = request.form.get('country_code')
+        country_code = (country_code_raw or 'co').strip().lower()
+        target_cities = _parse_list_form_field(request.form.get('target_cities'))
+        target_strata = _parse_list_form_field(request.form.get('target_strata'))
+        use_official_sources = _parse_bool_form_field(
+            request.form.get('use_official_sources'),
+            default=bool(country_code_raw or target_cities or target_strata),
+        )
+        use_live_web = _parse_bool_form_field(request.form.get('use_live_web'), default=False)
+        has_territorial_config = bool(
+            country_code_raw is not None
+            or target_cities
+            or target_strata
+            or 'use_official_sources' in request.form
+            or 'use_live_web' in request.form
+        )
         
         logger.debug(f"项目名称: {project_name}")
         logger.debug(f"模拟需求: {simulation_requirement[:100]}...")
@@ -319,10 +369,14 @@ def generate_ontology():
         # 创建项目
         project = ProjectManager.create_project(name=project_name)
         project.simulation_requirement = simulation_requirement
+        project.country_code = country_code
+        project.target_cities = target_cities
+        project.target_strata = target_strata
         logger.info(f"创建项目: {project.project_id}")
         
         # 保存文件并提取文本
         document_texts = []
+        extraction_audits = []
         all_text = ""
         
         for file in uploaded_files:
@@ -338,9 +392,12 @@ def generate_ontology():
                     "size": file_info["size"]
                 })
                 
-                # 提取文本
-                text = FileParser.extract_text(file_info["path"])
-                text = TextProcessor.preprocess_text(text)
+                # 提取文本 con auditoría por página
+                extracted = FileParser.extract_with_audit(file_info["path"])
+                text = TextProcessor.preprocess_text(extracted.get("text", ""))
+                audit_entry = extracted.get("audit")
+                if audit_entry:
+                    extraction_audits.append(audit_entry)
                 document_texts.append(text)
                 all_text += f"\n\n=== {file_info['original_filename']} ===\n{text}"
         
@@ -350,19 +407,79 @@ def generate_ontology():
                 "success": False,
                 "error": t('api.noDocProcessed')
             }), 400
+
+        if extraction_audits:
+            project.extraction_audit = extraction_audits
         
         # 保存提取的文本
         project.total_text_length = len(all_text)
         ProjectManager.save_extracted_text(project.project_id, all_text)
         logger.info(f"文本提取完成，共 {len(all_text)} 字符")
+
+        # Fusión de contexto territorial y cuantitativo (si se configuró contexto país)
+        context_fusion_result = None
+        if has_territorial_config:
+            try:
+                from ..services.context_fusion import ContextFusionService
+                project_dir = Path(ProjectManager._get_project_dir(project.project_id))
+                context_fusion_result = ContextFusionService().build_and_persist(
+                    project_id=project.project_id,
+                    project_dir=project_dir,
+                    country_code=country_code,
+                    target_cities=target_cities or None,
+                    target_strata=target_strata or None,
+                    simulation_requirement=simulation_requirement,
+                    document_texts=document_texts,
+                    use_official_sources=use_official_sources,
+                    use_live_web=use_live_web,
+                )
+                project.quant_store_path = context_fusion_result.get("quant_store_path")
+            except Exception as ctx_err:  # noqa: BLE001
+                logger.warning(f"Fusión territorial degradada (continúa flujo normal): {ctx_err}")
         
+        # Construir y persistir StudyContext + nombre real del proyecto (determinístico por defecto)
+        quant_indicators = None
+        if project.quant_store_path and os.path.exists(project.quant_store_path):
+            try:
+                import sqlite3
+                with sqlite3.connect(project.quant_store_path) as qconn:
+                    qconn.row_factory = sqlite3.Row
+                    quant_indicators = [
+                        dict(row)
+                        for row in qconn.execute(
+                            "SELECT metric_key, source_tier, value_num FROM quant_indicators"
+                        ).fetchall()
+                    ]
+            except Exception:
+                quant_indicators = None
+
+        use_llm_study_context = _parse_bool_form_field(
+            request.form.get('use_llm_study_context'),
+            default=False,
+        )
+        study_context = extract_and_build_study_context(
+            project_id=project.project_id,
+            project_name_hint=raw_project_name or None,
+            extracted_text=all_text,
+            simulation_requirement=simulation_requirement,
+            filenames=[f.get("filename", "") for f in project.files],
+            quant_indicators=quant_indicators,
+            use_llm=use_llm_study_context,
+            project_dir=Path(ProjectManager._get_project_dir(project.project_id)),
+            save=True,
+        )
+        project.name = study_context["project_name"]
+
         # 生成本体
         logger.info("调用 LLM 生成本体定义...")
         generator = OntologyGenerator()
         ontology = generator.generate(
             document_texts=document_texts,
             simulation_requirement=simulation_requirement,
-            additional_context=additional_context if additional_context else None
+            additional_context=additional_context if additional_context else None,
+            country_code=country_code if has_territorial_config else None,
+            target_cities=target_cities or None,
+            context_brief=(context_fusion_result or {}).get("context_brief"),
         )
         
         # 保存本体到项目
@@ -379,16 +496,33 @@ def generate_ontology():
         ProjectManager.save_project(project)
         logger.info(f"=== 本体生成完成 === 项目ID: {project.project_id}")
         
+        response_data = {
+            "project_id": project.project_id,
+            "project_name": project.name,
+            "project_slug": study_context["project_slug"],
+            "study_context": study_context,
+            "ontology": project.ontology,
+            "analysis_summary": project.analysis_summary,
+            "files": project.files,
+            "total_text_length": project.total_text_length,
+            "country_code": project.country_code,
+            "target_cities": project.target_cities,
+            "target_strata": project.target_strata,
+            "quant_store_path": project.quant_store_path,
+            "extraction_audit": project.extraction_audit,
+        }
+        if context_fusion_result:
+            response_data["country_context"] = {
+                "selected_cities": context_fusion_result.get("selected_cities", []),
+                "selected_strata": context_fusion_result.get("selected_strata", []),
+                "indicators_count": context_fusion_result.get("indicators_count", 0),
+                "data_gaps": context_fusion_result.get("data_gaps", []),
+                "conflicts": context_fusion_result.get("conflicts", []),
+            }
+
         return jsonify({
             "success": True,
-            "data": {
-                "project_id": project.project_id,
-                "project_name": project.name,
-                "ontology": project.ontology,
-                "analysis_summary": project.analysis_summary,
-                "files": project.files,
-                "total_text_length": project.total_text_length
-            }
+            "data": response_data
         })
         
     except Exception as error:
@@ -583,7 +717,22 @@ def _build_graph_impl():
             })
         
         # 获取配置
-        graph_name = data.get('graph_name', project.name or 'MiroFish Graph')
+        study_ctx = load_study_context(project_id) or ensure_study_context(project_id)
+        resolved_project_name = (
+            (study_ctx or {}).get("project_name")
+            or extract_real_project_name(
+                extracted_text=ProjectManager.get_extracted_text(project_id) or "",
+                simulation_requirement=project.simulation_requirement or "",
+                filenames=[f.get("filename", "") for f in (project.files or []) if isinstance(f, dict)],
+                project_name_hint=project.name,
+            )
+        )
+        if resolved_project_name and is_placeholder_project_name(project.name):
+            project.name = resolved_project_name
+        raw_graph_name = (data.get('graph_name') or '').strip()
+        if is_placeholder_project_name(raw_graph_name):
+            raw_graph_name = ''
+        graph_name = raw_graph_name or resolved_project_name or 'Estudio de Mercado'
         chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
         chunk_overlap = data.get('chunk_overlap', project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP)
         if not isinstance(chunk_size, int) or chunk_size <= 0:

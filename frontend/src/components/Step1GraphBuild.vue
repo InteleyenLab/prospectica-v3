@@ -31,7 +31,7 @@
           <div v-if="selectedOntologyItem" class="ontology-detail-overlay">
             <div class="detail-header">
                <div class="detail-title-group">
-                  <span class="detail-type-badge">{{ selectedOntologyItem.itemType === 'entity' ? 'ENTITY' : 'RELATION' }}</span>
+                  <span class="detail-type-badge">{{ selectedOntologyItem.itemType === 'entity' ? 'ENTIDAD' : 'RELACIÓN' }}</span>
                   <span class="detail-name">{{ selectedOntologyItem.name }}</span>
                </div>
                <button class="close-btn" @click="selectedOntologyItem = null">×</button>
@@ -41,7 +41,7 @@
                
                <!-- Attributes -->
                <div class="detail-section" v-if="selectedOntologyItem.attributes?.length">
-                  <span class="section-label">ATTRIBUTES</span>
+                  <span class="section-label">ATRIBUTOS</span>
                   <div class="attr-list">
                      <div v-for="attr in selectedOntologyItem.attributes" :key="attr.name" class="attr-item">
                         <span class="attr-name">{{ attr.name }}</span>
@@ -53,7 +53,7 @@
 
                <!-- Examples (Entity) -->
                <div class="detail-section" v-if="selectedOntologyItem.examples?.length">
-                  <span class="section-label">EXAMPLES</span>
+                  <span class="section-label">EJEMPLOS</span>
                   <div class="example-list">
                      <span v-for="ex in selectedOntologyItem.examples" :key="ex" class="example-tag">{{ ex }}</span>
                   </div>
@@ -61,7 +61,7 @@
 
                <!-- Source/Target (Relation) -->
                <div class="detail-section" v-if="selectedOntologyItem.source_targets?.length">
-                  <span class="section-label">CONNECTIONS</span>
+                  <span class="section-label">CONEXIONES</span>
                   <div class="conn-list">
                      <div v-for="(conn, idx) in selectedOntologyItem.source_targets" :key="idx" class="conn-item">
                         <span class="conn-node">{{ conn.source }}</span>
@@ -75,7 +75,7 @@
 
           <!-- Generated Entity Tags -->
           <div v-if="projectData?.ontology?.entity_types" class="tags-container" :class="{ 'dimmed': selectedOntologyItem }">
-            <span class="tag-label">GENERATED ENTITY TYPES</span>
+            <span class="tag-label">TIPOS DE ENTIDAD GENERADOS</span>
             <div class="tags-list">
               <span 
                 v-for="entity in projectData.ontology.entity_types" 
@@ -90,7 +90,7 @@
 
           <!-- Generated Relation Tags -->
           <div v-if="projectData?.ontology?.edge_types" class="tags-container" :class="{ 'dimmed': selectedOntologyItem }">
-            <span class="tag-label">GENERATED RELATION TYPES</span>
+            <span class="tag-label">TIPOS DE RELACIÓN GENERADOS</span>
             <div class="tags-list">
               <span 
                 v-for="rel in projectData.ontology.edge_types" 
@@ -158,9 +158,71 @@
         <div class="card-content">
           <p class="api-note">POST /api/simulation/create</p>
           <p class="description">{{ $t('step1.buildCompleteDesc') }}</p>
+
+          <!-- Selector de Canales Colombianos/LATAM y Encuesta N=300 -->
+          <div class="channels-config-box">
+            <div class="channels-config-header">
+              <span class="config-title">Canales de Simulación ({{ selectedChannels.length }} activos)</span>
+              <label class="survey-n-label">
+                Encuesta N:
+                <input
+                  v-model.number="surveyTargetN"
+                  type="number"
+                  min="30"
+                  max="1000"
+                  step="10"
+                  class="survey-n-input"
+                />
+              </label>
+            </div>
+            <div class="channels-chip-grid">
+              <button
+                v-for="ch in channelsCatalog"
+                :key="ch.channel_id"
+                type="button"
+                class="channel-chip"
+                :class="{ active: selectedChannels.includes(ch.channel_id), legacy: ch.is_legacy }"
+                @click="toggleChannelSelection(ch.channel_id)"
+              >
+                {{ ch.display_name.split(' (')[0] }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Confirmación Humana del StudyContext (V3 §5.2) -->
+          <div v-if="projectData?.project_id" class="study-confirm-box" style="margin: 12px 0; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:12px; font-weight:600; color:#1e293b;">
+                Confirmación del Modelo de Negocio (V3)
+              </span>
+              <span v-if="studyContextConfirmed" class="badge success" style="font-size:11px;">CONFIRMADO</span>
+              <span v-else class="badge pending" style="font-size:11px;">PENDIENTE</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+              <select v-model="selectedRevenueMechanism" style="padding:4px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px;">
+                <option value="tarifa_fija">Tarifa fija</option>
+                <option value="suscripcion">Suscripción</option>
+                <option value="comision_pct">Comisión %</option>
+                <option value="freemium">Freemium</option>
+                <option value="uso">Por uso</option>
+                <option value="exito">Éxito</option>
+                <option value="mixto">Mixto</option>
+              </select>
+              <button
+                type="button"
+                class="channel-chip"
+                :class="{ active: studyContextConfirmed }"
+                @click="handleConfirmStudyContext"
+                :disabled="confirmingContext"
+              >
+                {{ confirmingContext ? 'Confirmando...' : (studyContextConfirmed ? 'Modelo Confirmado ✓' : 'Confirmar Modelo') }}
+              </button>
+            </div>
+          </div>
+
           <button 
             class="action-btn" 
-            :disabled="currentPhase < 2 || creatingSimulation"
+            :disabled="currentPhase < 2 || creatingSimulation || selectedChannels.length === 0"
             @click="handleEnterEnvSetup"
           >
             <span v-if="creatingSimulation" class="spinner-sm"></span>
@@ -187,10 +249,11 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { createSimulation } from '../api/simulation'
+import { createSimulation, getChannelsCatalog } from '../api/simulation'
+import { confirmStudyContext } from '../api/v3'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -209,11 +272,70 @@ defineEmits(['next-step'])
 const selectedOntologyItem = ref(null)
 const logContent = ref(null)
 const creatingSimulation = ref(false)
+const studyContextConfirmed = ref(false)
+const confirmingContext = ref(false)
+const selectedRevenueMechanism = ref('tarifa_fija')
 
-// 进入环境搭建 - 创建 simulation 并跳转
+const handleConfirmStudyContext = async () => {
+  if (!props.projectData?.project_id || confirmingContext.value) return
+  confirmingContext.value = true
+  try {
+    await confirmStudyContext({
+      project_id: props.projectData.project_id,
+      updates: { business_model_template: { revenue_mechanism: selectedRevenueMechanism.value } },
+      confirmed_by: 'cliente_ui'
+    })
+    studyContextConfirmed.value = true
+  } catch (e) {
+    console.warn('No se pudo confirmar StudyContext:', e)
+  } finally {
+    confirmingContext.value = false
+  }
+}
+const surveyTargetN = ref(300)
+const channelsCatalog = ref([
+  { channel_id: 'whatsapp_1on1', display_name: 'WhatsApp 1-a-1', is_legacy: false },
+  { channel_id: 'focus_group', display_name: 'Focus Group', is_legacy: false },
+  { channel_id: 'street_survey', display_name: 'Encuesta de Calle', is_legacy: false },
+  { channel_id: 'facebook_groups', display_name: 'Grupos de Facebook', is_legacy: false },
+  { channel_id: 'tiktok', display_name: 'TikTok', is_legacy: false },
+  { channel_id: 'instagram', display_name: 'Instagram', is_legacy: false },
+  { channel_id: 'news_portals', display_name: 'Portales de Noticias', is_legacy: false },
+  { channel_id: 'colombian_web', display_name: 'Web Colombiana', is_legacy: false },
+  { channel_id: 'advertising', display_name: 'Publicidad OOH/Digital', is_legacy: false },
+  { channel_id: 'tv', display_name: 'Televisión', is_legacy: false },
+  { channel_id: 'radio', display_name: 'Radio AM/FM', is_legacy: false }
+])
+const selectedChannels = ref([
+  'whatsapp_1on1', 'focus_group', 'street_survey', 'facebook_groups',
+  'tiktok', 'instagram', 'news_portals', 'colombian_web',
+  'advertising', 'tv', 'radio'
+])
+
+const toggleChannelSelection = (channelId) => {
+  const idx = selectedChannels.value.indexOf(channelId)
+  if (idx >= 0) {
+    selectedChannels.value.splice(idx, 1)
+  } else {
+    selectedChannels.value.push(channelId)
+  }
+}
+
+onMounted(async () => {
+  try {
+    const res = await getChannelsCatalog(true)
+    if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+      channelsCatalog.value = res.data
+    }
+  } catch (e) {
+    // Mantiene catálogo local compacto si falla la precarga
+  }
+})
+
+//  -  simulation
 const handleEnterEnvSetup = async () => {
   if (!props.projectData?.project_id || !props.projectData?.graph_id) {
-    console.error('缺少项目或图谱信息')
+    console.error('\u7f3a\u5c11\u9879\u76ee\u6216\u56fe\u8c31\u4fe1\u606f')
     return
   }
   
@@ -223,22 +345,24 @@ const handleEnterEnvSetup = async () => {
     const res = await createSimulation({
       project_id: props.projectData.project_id,
       graph_id: props.projectData.graph_id,
+      enabled_channels: [...selectedChannels.value],
+      survey_target_n: surveyTargetN.value || 300,
       enable_twitter: true,
       enable_reddit: true
     })
     
     if (res.success && res.data?.simulation_id) {
-      // 跳转到 simulation 页面
+      //  simulation
       router.push({
         name: 'Simulation',
         params: { simulationId: res.data.simulation_id }
       })
     } else {
-      console.error('创建模拟失败:', res.error)
+      console.error('\u521b\u5efa\u6a21\u62df\u5931\u8d25:', res.error)
       alert(t('step1.createSimulationFailed', { error: res.error || t('common.unknownError') }))
     }
   } catch (err) {
-    console.error('创建模拟异常:', err)
+    console.error('\u521b\u5efa\u6a21\u62df\u5f02\u5e38:', err)
     alert(t('step1.createSimulationException', { error: err.message }))
   } finally {
     creatingSimulation.value = false
@@ -696,5 +820,63 @@ watch(() => props.systemLogs.length, () => {
 .log-msg {
   color: #CCC;
   word-break: break-all;
+}
+
+.channels-config-box {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.channels-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.survey-n-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.survey-n-input {
+  width: 68px;
+  border: 1px solid #CBD5E1;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.channels-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.channel-chip {
+  border: 1px solid #CBD5E1;
+  background: #FFF;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.channel-chip.active {
+  background: #0F172A;
+  color: #FFF;
+  border-color: #0F172A;
+}
+
+.channel-chip.legacy {
+  border-style: dashed;
 }
 </style>

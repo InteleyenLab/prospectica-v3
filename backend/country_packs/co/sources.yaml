@@ -1,0 +1,110 @@
+sources:
+  - source_id: "co_divipola_dane"
+    name: "DIVIPOLA Códigos Municipales y Departamentales (DANE)"
+    authority: "DANE / datos.gov.co"
+    category: "territorial"
+    tier: "A"
+    socrata_dataset_id: "gdxc-w37w"
+    endpoint_url: "https://www.datos.gov.co/resource/gdxc-w37w.json"
+    max_staleness_days: 365
+    notes: "Normalizar código municipio a 5 dígitos con zero-padding y coordenadas coma->punto."
+
+  - source_id: "co_internet_mintic"
+    name: "Internet Fijo por Municipio y Penetración (MinTIC)"
+    authority: "MinTIC / datos.gov.co"
+    category: "conectividad"
+    tier: "A"
+    socrata_dataset_id: "tvzi-ba2g"
+    endpoint_url: "https://www.datos.gov.co/resource/tvzi-ba2g.json"
+    max_staleness_days: 180
+    notes: "Población DANE y accesos/penetración de internet fijo por municipio."
+
+  - source_id: "co_trm_superfinanciera"
+    name: "Tasa Representativa del Mercado (TRM COP/USD)"
+    authority: "Superintendencia Financiera / datos.gov.co"
+    category: "macroeconomia"
+    tier: "A"
+    socrata_dataset_id: "32sa-8pi3"
+    endpoint_url: "https://www.datos.gov.co/resource/32sa-8pi3.json"
+    max_staleness_days: 14
+    notes: "Serie diaria oficial de TRM COP por USD."
+
+  - source_id: "co_quejas_superfinanciera"
+    name: "Reclamaciones ante Entidades Vigiladas (Superfinanciera)"
+    authority: "Superintendencia Financiera / datos.gov.co"
+    category: "seguros_quejas"
+    tier: "A"
+    socrata_dataset_id: "qzsc-9esp"
+    endpoint_url: "https://www.datos.gov.co/resource/qzsc-9esp.json"
+    max_staleness_days: 180
+    notes: "Motivos de quejas contra aseguradoras y entidades financieras."
+
+  - source_id: "co_ipvn_dane"
+    name: "Índice de Precios de Vivienda Nueva / IPVN (DANE)"
+    authority: "DANE / datos.gov.co"
+    category: "vivienda"
+    tier: "B"
+    socrata_dataset_id: "u3vn-bdcy"
+    endpoint_url: "https://www.datos.gov.co/resource/u3vn-bdcy.json"
+    max_staleness_days: 180
+    notes: "Referencia de precios inmobiliarios por área metropolitana."
+
+  - source_id: "co_secop_ii"
+    name: "SECOP II Procesos de Contratación Pública"
+    authority: "Colombia Compra Eficiente / datos.gov.co"
+    category: "contratacion_b2g"
+    tier: "B"
+    socrata_dataset_id: "ntxy-q9ix"
+    endpoint_url: "https://www.datos.gov.co/resource/ntxy-q9ix.json"
+    max_staleness_days: 90
+    notes: "Señal de demanda institucional / contratación pública."
+
+  - source_id: "co_siniestros_ansv"
+    name: "Siniestralidad Vial / Fallecidos y Lesionados (ANSV / Medicina Legal)"
+    authority: "ANSV / Medicina Legal / datos.gov.co"
+    category: "movilidad_siniestros"
+    tier: "A"
+    socrata_dataset_id: "6jmc-vaxk"
+    endpoint_url: "https://www.datos.gov.co/resource/6jmc-vaxk.json"
+    max_staleness_days: 365
+    notes: "Verificar fecha del último registro disponible para advertir rezago estadístico."
+
+  - source_id: "co_parque_automotor_runt"
+    name: "Parque Automotor y Motocicletas (RUNT / MinTransporte)"
+    authority: "MinTransporte / datos.gov.co"
+    category: "parque_automotor"
+    tier: "A"
+    socrata_dataset_id: "kgyi-qc7j"
+    endpoint_url: "https://www.datos.gov.co/resource/kgyi-qc7j.json"
+    max_staleness_days: 365
+    notes: "Distribución departamental de vehículos y motocicletas."
+
+  - source_id: "co_estratos_referencia"
+    name: "Estratificación Socioeconómica Municipal (DANE / SUI)"
+    authority: "DANE / Superservicios"
+    category: "demografia_estratos"
+    tier: "B"
+    socrata_dataset_id: "n48w-gutb"
+    endpoint_url: "https://www.datos.gov.co/resource/n48w-gutb.json"
+    max_staleness_days: 365
+    notes: "Referencia de distribución de suscriptores por estrato."
+
+  - source_id: "co_banrep_sdmx"
+    name: "Series Macroeconómicas SDMX (IPC, PIB, IBR)"
+    authority: "Banco de la República"
+    category: "macroeconomia"
+    tier: "A"
+    socrata_dataset_id: null
+    endpoint_url: "https://totoro.banrep.gov.co/nsi-jax-ws/rest/data"
+    max_staleness_days: 60
+    notes: "API SDMX oficial del Banco de la República (timeout tolerante)."
+
+  - source_id: "co_postdata_crc"
+    name: "Indicadores de Telefonía Móvil, WhatsApp y Banda Ancha"
+    authority: "Comisión de Regulación de Comunicaciones (CRC)"
+    category: "digital_telecom"
+    tier: "B"
+    socrata_dataset_id: null
+    endpoint_url: "https://www.postdata.gov.co/api/action/datastore/search.json"
+    max_staleness_days: 180
+    notes: "CKAN API de Postdata CRC sobre penetración móvil e internet."

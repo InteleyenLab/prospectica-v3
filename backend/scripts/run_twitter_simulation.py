@@ -115,6 +115,20 @@ def setup_oasis_logging(log_dir: str):
         logger.propagate = False
 
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+try:
+    from action_logger import PlatformActionLogger
+except Exception:
+    PlatformActionLogger = None
+
+try:
+    from app.llm.camel_adapter import build_simulation_camel_model
+except Exception:
+    build_simulation_camel_model = None
+
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
@@ -452,8 +466,15 @@ class TwitterSimulationRunner:
         if llm_base_url:
             os.environ["OPENAI_API_BASE_URL"] = llm_base_url
         
-        print(f"LLM配置: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else '默认'}...")
-        
+        print(f"LLM配置: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}...")
+
+        if build_simulation_camel_model is not None:
+            return build_simulation_camel_model(
+                model_type=llm_model,
+                api_key=llm_api_key or os.environ.get("OPENAI_API_KEY"),
+                base_url=llm_base_url or os.environ.get("OPENAI_API_BASE_URL"),
+            )
+
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,
@@ -593,7 +614,7 @@ class TwitterSimulationRunner:
             agent_graph=self.agent_graph,
             platform=oasis.DefaultPlatformType.TWITTER,
             database_path=db_path,
-            semaphore=30,  # 限制最大并发 LLM 请求数，防止 API 过载
+            semaphore=2,  # 限制最大并发 LLM 请求数，防止 API 过载
         )
         
         await self.env.reset()

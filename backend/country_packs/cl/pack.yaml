@@ -1,0 +1,15 @@
+country_code: "cl"
+country_name: "Chile"
+status: "planned"
+currency: "CLP"
+locale: "es-CL"
+timezone: "America/Santiago"
+min_wage_local: 500000
+transport_aid_local: 0
+min_wage_source: "Ingreso Mínimo Mensual Chile (INE / Dirección del Trabajo)"
+taxonomy_system: "GSE_AIM"
+metadata:
+  payment_methods: ["Webpay", "Mach", "CuentaRUT", "Transferencia", "Efectivo"]
+  privacy_law: "Ley 19.628 / Ley 21.719"
+  consumer_law: "Ley 19.496 sobre Protección de los Derechos de los Consumidores"
+  notes: "CountryPack LATAM Chile (Anexo I V3)."

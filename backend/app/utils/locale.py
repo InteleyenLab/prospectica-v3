@@ -20,21 +20,17 @@ for filename in os.listdir(_locales_dir):
             _translations[locale_name] = json.load(f)
 
 
-def set_locale(locale: str):
+def set_locale(locale: str = 'es'):
     """Set locale for current thread. Call at the start of background threads."""
-    _thread_local.locale = locale
+    _thread_local.locale = 'es'
 
 
 def get_locale() -> str:
-    if has_request_context():
-        raw = request.headers.get('Accept-Language', 'zh')
-        return raw if raw in _translations else 'zh'
-    return getattr(_thread_local, 'locale', 'zh')
+    return 'es'
 
 
 def t(key: str, **kwargs) -> str:
-    locale = get_locale()
-    messages = _translations.get(locale, _translations.get('zh', {}))
+    messages = _translations.get('es', {})
 
     value = messages
     for part in key.split('.'):
@@ -43,15 +39,6 @@ def t(key: str, **kwargs) -> str:
         else:
             value = None
             break
-
-    if value is None:
-        value = _translations.get('zh', {})
-        for part in key.split('.'):
-            if isinstance(value, dict):
-                value = value.get(part)
-            else:
-                value = None
-                break
 
     if value is None:
         return key
@@ -64,6 +51,8 @@ def t(key: str, **kwargs) -> str:
 
 
 def get_language_instruction() -> str:
-    locale = get_locale()
-    lang_config = _languages.get(locale, _languages.get('zh', {}))
-    return lang_config.get('llmInstruction', '请使用中文回答。')
+    return (
+        "INSTRUCCIÓN OBLIGATORIA DE IDIOMA: Debes redactar TODO el contenido, títulos de secciones, "
+        "resúmenes, análisis y conclusiones ESTRICTAMENTE EN ESPAÑOL. "
+        "Prohibido escribir títulos, encabezados o párrafos en chino o en inglés."
+    )

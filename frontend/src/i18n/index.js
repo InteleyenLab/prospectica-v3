@@ -7,19 +7,25 @@ const messages = {}
 const availableLocales = []
 
 for (const path in localeFiles) {
-  const key = path.match(/\/([^/]+)\.json$/)[1]
-  if (languages[key]) {
-    messages[key] = localeFiles[path].default
-    availableLocales.push({ key, label: languages[key].label })
+  const match = path.match(/\/([^/]+)\.json$/)
+  if (match) {
+    const key = match[1]
+    if (languages[key]) {
+      messages[key] = localeFiles[path].default
+      availableLocales.push({ key, label: languages[key].label })
+    }
   }
 }
 
-const savedLocale = localStorage.getItem('locale') || 'zh'
+// Forzar siempre español
+try {
+  localStorage.setItem('locale', 'es')
+} catch (e) {}
 
 const i18n = createI18n({
   legacy: false,
-  locale: savedLocale,
-  fallbackLocale: 'zh',
+  locale: 'es',
+  fallbackLocale: 'es',
   messages
 })
 

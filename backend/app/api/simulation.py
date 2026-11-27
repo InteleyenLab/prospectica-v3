@@ -13,6 +13,11 @@ from ..config import Config
 from ..services.zep_entity_reader import ZepEntityReader
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager, SimulationStatus
+from ..services.study_context_builder import (
+    extract_real_project_name,
+    load_study_context,
+    slugify_project_name,
+)
 from ..services.simulation_runner import (
     SimulationRunner,
     RunnerStatus,
@@ -50,9 +55,8 @@ def _get_default_platform(simulation_id: str) -> str:
     return "reddit"
 
 
-# Interview prompt 优化前缀
-# 添加此前缀可以避免Agent调用工具，直接用文本回复
-INTERVIEW_PROMPT_PREFIX = "结合你的人设、所有的过往记忆与行动，不调用任何工具直接用文本回复我："
+# Interview prompt optimizado para forzar texto en español y evitar llamadas a herramientas
+INTERVIEW_PROMPT_PREFIX = "Con base en tu perfil de personaje, recuerdos pasados y acciones en la simulación, responde directamente con texto en ESPAÑOL sin llamar a herramientas: "
 
 
 def optimize_interview_prompt(prompt: str) -> str:
@@ -251,6 +255,8 @@ def create_simulation():
             graph_id=graph_id,
             enable_twitter=data.get('enable_twitter', True),
             enable_reddit=data.get('enable_reddit', True),
+            enabled_channels=data.get('enabled_channels'),
+            survey_target_n=data.get('survey_target_n', 300),
         )
         
         return jsonify({
@@ -296,10 +302,8 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
     required_files = [
         "state.json",
         "simulation_config.json",
-        "reddit_profiles.json",
-        "twitter_profiles.csv"
     ]
-    
+
     # 检查文件是否存在
     existing_files = []
     missing_files = []
@@ -309,6 +313,40 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
             existing_files.append(f)
         else:
             missing_files.append(f)
+
+    reddit_profiles_path = os.path.join(simulation_dir, "reddit_profiles.json")
+    twitter_profiles_path = os.path.join(simulation_dir, "twitter_profiles.csv")
+    if os.path.exists(reddit_profiles_path):
+        existing_files.append("reddit_profiles.json")
+    if os.path.exists(twitter_profiles_path):
+        existing_files.append("twitter_profiles.csv")
+    if not os.path.exists(reddit_profiles_path) and not os.path.exists(twitter_profiles_path):
+        missing_files.extend(["reddit_profiles.json", "twitter_profiles.csv"])
+    elif not os.path.exists(reddit_profiles_path) and os.path.exists(twitter_profiles_path):
+        # Si falta reddit_profiles.json pero existe twitter_profiles.csv, reconstruirlo para modo parallel
+        try:
+            import csv
+            import json as _json
+            rebuilt = []
+            with open(twitter_profiles_path, 'r', encoding='utf-8-sig') as cf:
+                for idx, row in enumerate(csv.DictReader(cf)):
+                    rebuilt.append({
+                        "user_id": idx,
+                        "username": row.get("username") or f"user_{idx}",
+                        "name": row.get("name") or row.get("username") or f"Actor {idx}",
+                        "bio": row.get("description") or row.get("user_char") or "",
+                        "persona": row.get("user_char") or row.get("description") or "",
+                        "age": int(row["age"]) if str(row.get("age", "")).isdigit() else 32,
+                        "gender": row.get("gender") or "other",
+                        "mbti": row.get("mbti") or "ENTJ",
+                        "country": row.get("country") or "Colombia",
+                    })
+            if rebuilt:
+                with open(reddit_profiles_path, 'w', encoding='utf-8') as rf:
+                    _json.dump(rebuilt, rf, ensure_ascii=False, indent=2)
+                existing_files.append("reddit_profiles.json")
+        except Exception:
+            pass
     
     if missing_files:
         return False, {
@@ -503,12 +541,25 @@ def prepare_simulation():
         try:
             logger.info(f"同步获取实体数量: graph_id={state.graph_id}")
             reader = ZepEntityReader()
-            # 快速读取实体（不需要边信息，只统计数量）
-            filtered_preview = reader.filter_defined_entities(
-                graph_id=state.graph_id,
-                defined_entity_types=entity_types_list,
-                enrich_with_edges=False  # 不获取边信息，加快速度
-            )
+            # 快速读取实体（不需要边信息，只统计数量），excluyendo entidades no humanas
+            if hasattr(reader, "fetch_simulatable_actors"):
+                filtered_preview = reader.fetch_simulatable_actors(
+                    graph_id=state.graph_id,
+                    defined_entity_types=entity_types_list,
+                    enrich_with_edges=False  # 不获取边信息，加快速度
+                )
+                if filtered_preview.filtered_count == 0:
+                    filtered_preview = reader.filter_defined_entities(
+                        graph_id=state.graph_id,
+                        defined_entity_types=entity_types_list,
+                        enrich_with_edges=False
+                    )
+            else:
+                filtered_preview = reader.filter_defined_entities(
+                    graph_id=state.graph_id,
+                    defined_entity_types=entity_types_list,
+                    enrich_with_edges=False
+                )
             # 保存实体数量到状态（供前端立即获取）
             state.entities_count = filtered_preview.filtered_count
             state.entity_types = list(filtered_preview.entity_types)
@@ -787,6 +838,50 @@ def get_prepare_status():
         }), 500
 
 
+@simulation_bp.route('/<simulation_id>', methods=['DELETE'])
+def delete_simulation_endpoint(simulation_id: str):
+    """Elimina una simulación individual (y sus informes asociados)."""
+    try:
+        # Detener forzosamente cualquier ejecución antes de eliminar
+        run_state = SimulationRunner.get_run_state(simulation_id)
+        if run_state and run_state.runner_status in {
+            RunnerStatus.RUNNING, RunnerStatus.PAUSED, RunnerStatus.STOPPING
+        }:
+            try:
+                SimulationRunner.stop_simulation(simulation_id)
+            except Exception as stop_err:
+                logger.warning(f"Detención normal falló para {simulation_id}: {stop_err}; forzando")
+            proc = SimulationRunner._processes.pop(simulation_id, None)
+            if proc is not None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=10)
+                except Exception:
+                    pass
+            for store in (SimulationRunner._stdout_files, SimulationRunner._stderr_files):
+                fh = store.pop(simulation_id, None)
+                try:
+                    if fh:
+                        fh.close()
+                except Exception:
+                    pass
+            try:
+                ZepGraphMemoryManager.stop_updater(simulation_id)
+            except Exception:
+                pass
+        SimulationRunner._run_states.pop(simulation_id, None)
+        SimulationRunner._action_queues.pop(simulation_id, None)
+        result = SimulationManager().delete_simulation(simulation_id)
+        return jsonify({"success": True, "data": result})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except FileNotFoundError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
+    except Exception as e:
+        logger.error(f"Error al eliminar simulación {simulation_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @simulation_bp.route('/<simulation_id>', methods=['GET'])
 def get_simulation(simulation_id: str):
     """获取模拟状态"""
@@ -801,6 +896,22 @@ def get_simulation(simulation_id: str):
             }), 404
         
         result = state.to_dict()
+        try:
+            study_ctx = load_study_context(state.project_id) if state.project_id else None
+            project = ProjectManager.get_project(state.project_id) if state.project_id else None
+            resolved_name = (study_ctx or {}).get("project_name")
+            if not resolved_name and project:
+                resolved_name = extract_real_project_name(
+                    extracted_text=ProjectManager.get_extracted_text(state.project_id) or "",
+                    simulation_requirement=project.simulation_requirement or "",
+                    filenames=[f.get("filename", "") for f in (project.files or []) if isinstance(f, dict)],
+                    project_name_hint=project.name,
+                )
+            if resolved_name:
+                result["project_name"] = resolved_name
+                result["project_slug"] = (study_ctx or {}).get("project_slug") or slugify_project_name(resolved_name)
+        except Exception:
+            pass
         
         # 如果模拟已准备好，附加运行说明
         if state.status == SimulationStatus.READY:
@@ -984,6 +1095,34 @@ def get_simulation_history():
             
             # 获取关联项目的文件列表（最多3个）
             project = ProjectManager.get_project(sim.project_id)
+            if not sim_dict["simulation_requirement"] and project and project.simulation_requirement:
+                sim_dict["simulation_requirement"] = project.simulation_requirement
+
+            study_ctx = None
+            try:
+                study_ctx = load_study_context(sim.project_id) if sim.project_id else None
+            except Exception:
+                study_ctx = None
+
+            if study_ctx and study_ctx.get("project_name"):
+                sim_dict["project_name"] = study_ctx["project_name"]
+                sim_dict["project_slug"] = study_ctx.get("project_slug") or slugify_project_name(study_ctx["project_name"])
+            elif project:
+                resolved_name = extract_real_project_name(
+                    extracted_text=ProjectManager.get_extracted_text(sim.project_id) or "",
+                    simulation_requirement=project.simulation_requirement or sim_dict.get("simulation_requirement") or "",
+                    filenames=[f.get("filename", "") for f in (project.files or []) if isinstance(f, dict)],
+                    project_name_hint=project.name,
+                )
+                sim_dict["project_name"] = resolved_name
+                sim_dict["project_slug"] = slugify_project_name(resolved_name)
+            else:
+                resolved_name = extract_real_project_name(
+                    simulation_requirement=sim_dict.get("simulation_requirement") or "",
+                )
+                sim_dict["project_name"] = resolved_name
+                sim_dict["project_slug"] = slugify_project_name(resolved_name)
+
             if project and hasattr(project, 'files') and project.files:
                 sim_dict["files"] = [
                     {"filename": f.get("filename", "未知文件")} 
@@ -2006,6 +2145,18 @@ def get_run_status_detail(simulation_id: str):
         result["rounds_count"] = len(run_state.rounds)
         # recent_actions 只展示当前最新一轮两个平台的内容
         result["recent_actions"] = [a.to_dict() for a in recent_actions]
+
+        # Resumen multicanal (Fase 3) sin afectar simulaciones legadas
+        try:
+            from pathlib import Path
+            from ..channels.persistence import ChannelSQLiteStore
+            sim_dir = Path(Config.OASIS_SIMULATION_DATA_DIR) / simulation_id
+            channels_summary = {}
+            if (sim_dir / "simulation_channels.db").exists():
+                channels_summary = ChannelSQLiteStore(sim_dir).summarize_channels(simulation_id=simulation_id)
+            result["channels"] = channels_summary
+        except Exception:
+            result["channels"] = {}
         
         return jsonify({
             "success": True,

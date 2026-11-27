@@ -23,29 +23,31 @@ from ..utils.logger import get_logger
 from ..utils.locale import get_language_instruction, t
 from ..utils.openai_chat_compat import create_chat_completion, extract_chat_completion_text
 from .zep_entity_reader import EntityNode, ZepEntityReader
+from .demographic_sampler import DemographicSampler
 
 logger = get_logger('mirofish.simulation_config')
 
-# 中国作息时间配置（北京时间）
-CHINA_TIMEZONE_CONFIG = {
-    # 深夜时段（几乎无人活动）
-    "dead_hours": [0, 1, 2, 3, 4, 5],
-    # 早间时段（逐渐醒来）
-    "morning_hours": [6, 7, 8],
-    # 工作时段
+# Configuración horaria colombiana / LATAM por defecto (America/Bogota UTC-5)
+COLOMBIA_TIMEZONE_CONFIG = {
+    "timezone": "America/Bogota",
+    "utc_offset": "UTC-5",
+    # Madrugada (baja actividad)
+    "dead_hours": [0, 1, 2, 3, 4],
+    # Mañana temprana (radio, transporte, inicio de jornada)
+    "morning_hours": [5, 6, 7, 8],
+    # Horario laboral/comercial en Colombia
     "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-    # 晚间高峰（最活跃）
+    # Horario pico noche (WhatsApp, redes sociales, TV)
     "peak_hours": [19, 20, 21, 22],
-    # 夜间时段（活跃度下降）
+    # Noche tardía
     "night_hours": [23],
-    # 活跃度系数
     "activity_multipliers": {
-        "dead": 0.05,      # 凌晨几乎无人
-        "morning": 0.4,    # 早间逐渐活跃
-        "work": 0.7,       # 工作时段中等
-        "peak": 1.5,       # 晚间高峰
-        "night": 0.5       # 深夜下降
-    }
+        "dead": 0.05,
+        "morning": 0.45,
+        "work": 0.75,
+        "peak": 1.5,
+        "night": 0.5,
+    },
 }
 
 
@@ -83,32 +85,35 @@ class AgentActivityConfig:
 
 @dataclass  
 class TimeSimulationConfig:
-    """时间模拟配置（基于中国人作息习惯）"""
-    # 模拟总时长（模拟小时数）
-    total_simulation_hours: int = 72  # 默认模拟72小时（3天）
+    """Configuración temporal adaptada al huso horario del CountryPack (America/Bogota UTC-5)."""
+    timezone: str = "America/Bogota"
+    utc_offset: str = "UTC-5"
+
+    # Duración total simulada (horas)
+    total_simulation_hours: int = 72
     
-    # 每轮代表的时间（模拟分钟）- 默认60分钟（1小时），加快时间流速
+    # Duración de cada ronda (minutos)
     minutes_per_round: int = 60
     
-    # 每小时激活的Agent数量范围
+    # Rango de agentes activos por hora
     agents_per_hour_min: int = 5
     agents_per_hour_max: int = 20
     
-    # 高峰时段（晚间19-22点，中国人最活跃的时间）
+    # Franja pico (19:00 - 22:00 hora Colombia)
     peak_hours: List[int] = field(default_factory=lambda: [19, 20, 21, 22])
     peak_activity_multiplier: float = 1.5
     
-    # 低谷时段（凌晨0-5点，几乎无人活动）
-    off_peak_hours: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5])
-    off_peak_activity_multiplier: float = 0.05  # 凌晨活跃度极低
+    # Franja valle (00:00 - 04:00)
+    off_peak_hours: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
+    off_peak_activity_multiplier: float = 0.05
     
-    # 早间时段
-    morning_hours: List[int] = field(default_factory=lambda: [6, 7, 8])
-    morning_activity_multiplier: float = 0.4
+    # Franja mañana temprana (05:00 - 08:00)
+    morning_hours: List[int] = field(default_factory=lambda: [5, 6, 7, 8])
+    morning_activity_multiplier: float = 0.45
     
-    # 工作时段
+    # Horario laboral/comercial (09:00 - 18:00)
     work_hours: List[int] = field(default_factory=lambda: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
-    work_activity_multiplier: float = 0.7
+    work_activity_multiplier: float = 0.75
 
 
 @dataclass
@@ -252,6 +257,9 @@ class SimulationConfigGenerator:
         enable_twitter: bool = True,
         enable_reddit: bool = True,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        country_code: str = "co",
+        target_cities: Optional[List[str]] = None,
+        target_strata: Optional[List[str]] = None,
     ) -> SimulationParameters:
         """
         智能生成完整的模拟配置（分步生成）
@@ -284,6 +292,18 @@ class SimulationConfigGenerator:
                 progress_callback(step, total_steps, message)
             logger.info(f"[{step}/{total_steps}] {message}")
         
+        # 0. Muestreo demográfico y conductual estratificado desde CountryPack
+        sampler = DemographicSampler(country_code=country_code or "co")
+        seed = sampler.stable_seed_for_entities(simulation_id or project_id, entities)
+        allocations = sampler.sample_allocations(
+            count=len(entities),
+            country_code=country_code,
+            target_cities=target_cities,
+            target_strata=target_strata,
+            entities=entities,
+            seed=seed,
+        )
+
         # 1. 构建基础上下文信息
         context = self._build_context(
             simulation_requirement=simulation_requirement,
@@ -296,8 +316,8 @@ class SimulationConfigGenerator:
         # ========== 步骤1: 生成时间配置 ==========
         report_progress(1, t('progress.generatingTimeConfig'))
         num_entities = len(entities)
-        time_config_result = self._generate_time_config(context, num_entities)
-        time_config = self._parse_time_config(time_config_result, num_entities)
+        time_config_result = self._generate_time_config(context, num_entities, timezone=sampler.pack.timezone)
+        time_config = self._parse_time_config(time_config_result, num_entities, timezone=sampler.pack.timezone)
         reasoning_parts.append(f"{t('progress.timeConfigLabel')}: {time_config_result.get('reasoning', t('common.success'))}")
         
         # ========== 步骤2: 生成事件配置 ==========
@@ -312,6 +332,7 @@ class SimulationConfigGenerator:
             start_idx = batch_idx * self.AGENTS_PER_BATCH
             end_idx = min(start_idx + self.AGENTS_PER_BATCH, len(entities))
             batch_entities = entities[start_idx:end_idx]
+            batch_allocs = allocations[start_idx:end_idx]
             
             report_progress(
                 3 + batch_idx,
@@ -322,7 +343,8 @@ class SimulationConfigGenerator:
                 context=context,
                 entities=batch_entities,
                 start_idx=start_idx,
-                simulation_requirement=simulation_requirement
+                simulation_requirement=simulation_requirement,
+                allocations=batch_allocs,
             )
             all_agent_configs.extend(batch_configs)
         
@@ -534,115 +556,101 @@ class SimulationConfigGenerator:
         
         return None
     
-    def _generate_time_config(self, context: str, num_entities: int) -> Dict[str, Any]:
-        """生成时间配置"""
-        # 使用配置的上下文截断长度
+    def _generate_time_config(
+        self, context: str, num_entities: int, timezone: str = "America/Bogota"
+    ) -> Dict[str, Any]:
+        """Genera configuración temporal adaptada a la zona horaria del CountryPack (ej. America/Bogota UTC-5)."""
         context_truncated = context[:self.TIME_CONFIG_CONTEXT_LENGTH]
-        
-        # 计算最大允许值（80%的agent数）
         max_agents_allowed = max(1, int(num_entities * 0.9))
         
-        prompt = f"""基于以下模拟需求，生成时间模拟配置。
+        prompt = f"""Con base en el estudio, genera la configuración temporal en JSON para la zona horaria {timezone} (UTC-5).
 
 {context_truncated}
 
-## 任务
-请生成时间配置JSON。
+Principios para hábitos digitales y presenciales en Colombia/LATAM ({timezone}):
+- Madrugada 00:00-04:00: actividad mínima (factor 0.05).
+- Mañana temprana 05:00-08:00: radio, transporte, WhatsApp temprano (factor 0.45).
+- Jornada laboral/comercial 09:00-18:00: actividad media-alta (factor 0.75).
+- Pico nocturno 19:00-22:00: mayor interacción en WhatsApp, redes sociales y TV (factor 1.5).
+- 23:00: descenso nocturno (factor 0.5).
 
-### 基本原则（仅供参考，需根据具体事件和参与群体灵活调整）：
-- 请根据模拟场景推断目标用户群体所在时区和作息习惯，以下为东八区(UTC+8)的参考示例
-- 凌晨0-5点几乎无人活动（活跃度系数0.05）
-- 早上6-8点逐渐活跃（活跃度系数0.4）
-- 工作时间9-18点中等活跃（活跃度系数0.7）
-- 晚间19-22点是高峰期（活跃度系数1.5）
-- 23点后活跃度下降（活跃度系数0.5）
-- 一般规律：凌晨低活跃、早间渐增、工作时段中等、晚间高峰
-- **重要**：以下示例值仅供参考，你需要根据事件性质、参与群体特点来调整具体时段
-  - 例如：学生群体高峰可能是21-23点；媒体全天活跃；官方机构只在工作时间
-  - 例如：突发热点可能导致深夜也有讨论，off_peak_hours 可适当缩短
-
-### 返回JSON格式（不要markdown）
-
-示例：
+Devuelve JSON puro sin markdown con estas claves:
 {{
+    "timezone": "{timezone}",
+    "utc_offset": "UTC-5",
     "total_simulation_hours": 72,
     "minutes_per_round": 60,
-    "agents_per_hour_min": 5,
-    "agents_per_hour_max": 50,
+    "agents_per_hour_min": 1,
+    "agents_per_hour_max": {max(2, max_agents_allowed)},
     "peak_hours": [19, 20, 21, 22],
-    "off_peak_hours": [0, 1, 2, 3, 4, 5],
-    "morning_hours": [6, 7, 8],
+    "off_peak_hours": [0, 1, 2, 3, 4],
+    "morning_hours": [5, 6, 7, 8],
     "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-    "reasoning": "针对该事件的时间配置说明"
-}}
+    "reasoning": "Justificación en español según hábitos de {timezone}."
+}}"""
 
-字段说明：
-- total_simulation_hours (int): 模拟总时长，24-168小时，突发事件短、持续话题长
-- minutes_per_round (int): 每轮时长，30-120分钟，建议60分钟
-- agents_per_hour_min (int): 每小时最少激活Agent数（取值范围: 1-{max_agents_allowed}）
-- agents_per_hour_max (int): 每小时最多激活Agent数（取值范围: 1-{max_agents_allowed}）
-- peak_hours (int数组): 高峰时段，根据事件参与群体调整
-- off_peak_hours (int数组): 低谷时段，通常深夜凌晨
-- morning_hours (int数组): 早间时段
-- work_hours (int数组): 工作时段
-- reasoning (string): 简要说明为什么这样配置"""
-
-        system_prompt = "你是社交媒体模拟专家。返回纯JSON格式，时间配置需符合模拟场景中目标用户群体的作息习惯。"
-        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+        system_prompt = (
+            f"Eres un especialista en simulación social para LATAM. "
+            f"Devuelve JSON puro en español para zona horaria {timezone} (UTC-5). "
+            f"{get_language_instruction()}"
+        )
 
         try:
-            return self._call_llm_with_retry(prompt, system_prompt)
+            res = self._call_llm_with_retry(prompt, system_prompt)
+            res["timezone"] = timezone
+            res["utc_offset"] = "UTC-5"
+            return res
         except Exception as e:
-            logger.warning(f"时间配置LLM生成失败: {e}, 使用默认配置")
-            return self._get_default_time_config(num_entities)
+            logger.warning(f"Fallo generación LLM de tiempo: {e}; usando horario local {timezone}")
+            return self._get_default_time_config(num_entities, timezone=timezone)
     
-    def _get_default_time_config(self, num_entities: int) -> Dict[str, Any]:
-        """获取默认时间配置（中国人作息）"""
+    def _get_default_time_config(
+        self, num_entities: int, timezone: str = "America/Bogota"
+    ) -> Dict[str, Any]:
+        """Configuración horaria por defecto para Colombia/LATAM (UTC-5)."""
         return {
+            "timezone": timezone,
+            "utc_offset": "UTC-5",
             "total_simulation_hours": 72,
-            "minutes_per_round": 60,  # 每轮1小时，加快时间流速
+            "minutes_per_round": 60,
             "agents_per_hour_min": max(1, num_entities // 15),
             "agents_per_hour_max": max(5, num_entities // 5),
-            "peak_hours": [19, 20, 21, 22],
-            "off_peak_hours": [0, 1, 2, 3, 4, 5],
-            "morning_hours": [6, 7, 8],
-            "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-            "reasoning": "使用默认中国人作息配置（每轮1小时）"
+            "peak_hours": list(COLOMBIA_TIMEZONE_CONFIG["peak_hours"]),
+            "off_peak_hours": list(COLOMBIA_TIMEZONE_CONFIG["dead_hours"]),
+            "morning_hours": list(COLOMBIA_TIMEZONE_CONFIG["morning_hours"]),
+            "work_hours": list(COLOMBIA_TIMEZONE_CONFIG["work_hours"]),
+            "reasoning": f"Horario comercial y digital colombiano ({timezone}, UTC-5, 1 hora por ronda)."
         }
     
-    def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeSimulationConfig:
-        """解析时间配置结果，并验证agents_per_hour值不超过总agent数"""
-        # 获取原始值
+    def _parse_time_config(
+        self, result: Dict[str, Any], num_entities: int, timezone: str = "America/Bogota"
+    ) -> TimeSimulationConfig:
+        """Valida y normaliza el rango horario del estudio."""
         agents_per_hour_min = result.get("agents_per_hour_min", max(1, num_entities // 15))
         agents_per_hour_max = result.get("agents_per_hour_max", max(5, num_entities // 5))
         
-        # 验证并修正：确保不超过总agent数
         if agents_per_hour_min > num_entities:
-            logger.warning(f"agents_per_hour_min ({agents_per_hour_min}) 超过总Agent数 ({num_entities})，已修正")
             agents_per_hour_min = max(1, num_entities // 10)
-        
         if agents_per_hour_max > num_entities:
-            logger.warning(f"agents_per_hour_max ({agents_per_hour_max}) 超过总Agent数 ({num_entities})，已修正")
             agents_per_hour_max = max(agents_per_hour_min + 1, num_entities // 2)
-        
-        # 确保 min < max
         if agents_per_hour_min >= agents_per_hour_max:
             agents_per_hour_min = max(1, agents_per_hour_max // 2)
-            logger.warning(f"agents_per_hour_min >= max，已修正为 {agents_per_hour_min}")
         
         return TimeSimulationConfig(
+            timezone=result.get("timezone", timezone),
+            utc_offset=result.get("utc_offset", "UTC-5"),
             total_simulation_hours=result.get("total_simulation_hours", 72),
-            minutes_per_round=result.get("minutes_per_round", 60),  # 默认每轮1小时
+            minutes_per_round=result.get("minutes_per_round", 60),
             agents_per_hour_min=agents_per_hour_min,
             agents_per_hour_max=agents_per_hour_max,
-            peak_hours=result.get("peak_hours", [19, 20, 21, 22]),
-            off_peak_hours=result.get("off_peak_hours", [0, 1, 2, 3, 4, 5]),
-            off_peak_activity_multiplier=0.05,  # 凌晨几乎无人
-            morning_hours=result.get("morning_hours", [6, 7, 8]),
-            morning_activity_multiplier=0.4,
-            work_hours=result.get("work_hours", list(range(9, 19))),
-            work_activity_multiplier=0.7,
-            peak_activity_multiplier=1.5
+            peak_hours=result.get("peak_hours", list(COLOMBIA_TIMEZONE_CONFIG["peak_hours"])),
+            off_peak_hours=result.get("off_peak_hours", list(COLOMBIA_TIMEZONE_CONFIG["dead_hours"])),
+            off_peak_activity_multiplier=COLOMBIA_TIMEZONE_CONFIG["activity_multipliers"]["dead"],
+            morning_hours=result.get("morning_hours", list(COLOMBIA_TIMEZONE_CONFIG["morning_hours"])),
+            morning_activity_multiplier=COLOMBIA_TIMEZONE_CONFIG["activity_multipliers"]["morning"],
+            work_hours=result.get("work_hours", list(COLOMBIA_TIMEZONE_CONFIG["work_hours"])),
+            work_activity_multiplier=COLOMBIA_TIMEZONE_CONFIG["activity_multipliers"]["work"],
+            peak_activity_multiplier=COLOMBIA_TIMEZONE_CONFIG["activity_multipliers"]["peak"],
         )
     
     def _generate_event_config(
@@ -715,7 +723,7 @@ class SimulationConfigGenerator:
                 "hot_topics": [],
                 "narrative_direction": "",
                 "initial_posts": [],
-                "reasoning": "使用默认配置"
+                "reasoning": "Configuración de eventos por defecto."
             }
     
     def _parse_event_config(self, result: Dict[str, Any]) -> EventConfig:
@@ -817,177 +825,159 @@ class SimulationConfigGenerator:
         context: str,
         entities: List[EntityNode],
         start_idx: int,
-        simulation_requirement: str
+        simulation_requirement: str,
+        allocations: Optional[List[Any]] = None,
     ) -> List[AgentActivityConfig]:
-        """分批生成Agent配置"""
-        
-        # 构建实体信息（使用配置的摘要长度）
+        """Genera configuración conductual por lote con diversidad real de postura y actividad (UTC-5)."""
         entity_list = []
         summary_len = self.AGENT_SUMMARY_LENGTH
         for i, e in enumerate(entities):
+            alloc = allocations[i] if allocations and i < len(allocations) else None
             entity_list.append({
                 "agent_id": start_idx + i,
                 "entity_name": e.name,
                 "entity_type": e.get_entity_type() or "Unknown",
+                "city": getattr(alloc, "city_name", "Colombia") if alloc else "Colombia",
+                "stratum": getattr(alloc, "stratum_code", "E3") if alloc else "E3",
+                "suggested_stance": getattr(alloc, "stance", "opposing") if alloc else "opposing",
                 "summary": e.summary[:summary_len] if e.summary else ""
             })
         
-        prompt = f"""基于以下信息，为每个实体生成社交媒体活动配置。
+        prompt = f"""Genera la configuración conductual en JSON para cada agente en horario colombiano (America/Bogota UTC-5).
 
-模拟需求: {simulation_requirement}
+Requisito del estudio: {simulation_requirement}
 
-## 实体列表
+Entidades:
 ```json
 {json.dumps(entity_list, ensure_ascii=False, indent=2)}
 ```
 
-## 任务
-为每个实体生成活动配置，注意：
-- **时间符合目标用户群体作息**：以下为参考（东八区），请根据模拟场景调整
-- **官方机构**（University/GovernmentAgency）：活跃度低(0.1-0.3)，工作时间(9-17)活动，响应慢(60-240分钟)，影响力高(2.5-3.0)
-- **媒体**（MediaOutlet）：活跃度中(0.4-0.6)，全天活动(8-23)，响应快(5-30分钟)，影响力高(2.0-2.5)
-- **个人**（Student/Person/Alumni）：活跃度高(0.6-0.9)，主要晚间活动(18-23)，响应快(1-15分钟)，影响力低(0.8-1.2)
-- **公众人物/专家**：活跃度中(0.4-0.6)，影响力中高(1.5-2.0)
+Reglas:
+- Respetar la diversidad real (NO poner a todos neutrales ni con activity_level uniforme).
+- "stance" debe tomar uno de: "supportive", "opposing", "neutral", "observer".
+- "activity_level" entre 0.15 y 0.95 según perfil e interés en el tema.
+- "sentiment_bias" entre -0.95 y 0.90 coherente con su "stance".
 
-返回JSON格式（不要markdown）：
+Devuelve JSON puro sin markdown:
 {{
     "agent_configs": [
         {{
-            "agent_id": <必须与输入一致>,
-            "activity_level": <0.0-1.0>,
-            "posts_per_hour": <发帖频率>,
-            "comments_per_hour": <评论频率>,
-            "active_hours": [<活跃小时列表，考虑中国人作息>],
-            "response_delay_min": <最小响应延迟分钟>,
-            "response_delay_max": <最大响应延迟分钟>,
-            "sentiment_bias": <-1.0到1.0>,
+            "agent_id": <int>,
+            "activity_level": <float>,
+            "posts_per_hour": <float>,
+            "comments_per_hour": <float>,
+            "active_hours": [<ints 0..23>],
+            "response_delay_min": <int>,
+            "response_delay_max": <int>,
+            "sentiment_bias": <float>,
             "stance": "<supportive/opposing/neutral/observer>",
-            "influence_weight": <影响力权重>
-        }},
-        ...
+            "influence_weight": <float>
+        }}
     ]
 }}"""
 
-        system_prompt = "你是社交媒体行为分析专家。返回纯JSON，配置需符合模拟场景中目标用户群体的作息习惯。"
-        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}\nIMPORTANT: The 'stance' field value MUST be one of the English strings: 'supportive', 'opposing', 'neutral', 'observer'. All JSON field names and numeric values must remain unchanged. Only natural language text fields should use the specified language."
+        system_prompt = (
+            "Eres un experto en comportamiento del consumidor y simulación social en LATAM/Colombia. "
+            f"Devuelve JSON válido. {get_language_instruction()}\n"
+            "IMPORTANT: 'stance' MUST be one of 'supportive', 'opposing', 'neutral', 'observer'."
+        )
 
         try:
             result = self._call_llm_with_retry(prompt, system_prompt)
             llm_configs = {cfg["agent_id"]: cfg for cfg in result.get("agent_configs", [])}
         except Exception as e:
-            logger.warning(f"Agent配置批次LLM生成失败: {e}, 使用规则生成")
+            logger.warning(f"Fallo generación LLM de lote de agentes: {e}; usando reglas estratificadas")
             llm_configs = {}
         
-        # 构建AgentActivityConfig对象
         configs = []
         for i, entity in enumerate(entities):
             agent_id = start_idx + i
-            cfg = llm_configs.get(agent_id, {})
-            
-            # 如果LLM没有生成，使用规则生成
-            if not cfg:
-                cfg = self._generate_agent_config_by_rule(entity)
-            
+            alloc = allocations[i] if allocations and i < len(allocations) else None
+            rule_cfg = self._generate_agent_config_by_rule(entity, allocation=alloc, idx=agent_id)
+            cfg = llm_configs.get(agent_id, {}) or rule_cfg
+
+            # Blindaje contra colapso uniforme de LLM (si el LLM devuelve stance plano o activity constante)
+            stance = cfg.get("stance", rule_cfg["stance"])
+            if stance not in ("supportive", "opposing", "neutral", "observer"):
+                stance = rule_cfg["stance"]
+            activity = float(cfg.get("activity_level", rule_cfg["activity_level"]))
+            if alloc and stance == "neutral" and alloc.stance in ("opposing", "supportive", "observer"):
+                stance = alloc.stance
+            if alloc and abs(activity - 0.7) < 0.02:
+                activity = rule_cfg["activity_level"]
+
             config = AgentActivityConfig(
                 agent_id=agent_id,
                 entity_uuid=entity.uuid,
                 entity_name=entity.name,
                 entity_type=entity.get_entity_type() or "Unknown",
-                activity_level=cfg.get("activity_level", 0.5),
-                posts_per_hour=cfg.get("posts_per_hour", 0.5),
-                comments_per_hour=cfg.get("comments_per_hour", 1.0),
-                active_hours=cfg.get("active_hours", list(range(9, 23))),
-                response_delay_min=cfg.get("response_delay_min", 5),
-                response_delay_max=cfg.get("response_delay_max", 60),
-                sentiment_bias=cfg.get("sentiment_bias", 0.0),
-                stance=cfg.get("stance", "neutral"),
-                influence_weight=cfg.get("influence_weight", 1.0)
+                activity_level=round(min(0.98, max(0.10, activity)), 2),
+                posts_per_hour=float(cfg.get("posts_per_hour", rule_cfg["posts_per_hour"])),
+                comments_per_hour=float(cfg.get("comments_per_hour", rule_cfg["comments_per_hour"])),
+                active_hours=cfg.get("active_hours", rule_cfg["active_hours"]),
+                response_delay_min=int(cfg.get("response_delay_min", rule_cfg["response_delay_min"])),
+                response_delay_max=int(cfg.get("response_delay_max", rule_cfg["response_delay_max"])),
+                sentiment_bias=float(cfg.get("sentiment_bias", rule_cfg["sentiment_bias"])),
+                stance=stance,
+                influence_weight=float(cfg.get("influence_weight", rule_cfg["influence_weight"])),
             )
             configs.append(config)
         
         return configs
     
-    def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
-        """基于规则生成单个Agent配置（中国人作息）"""
+    def _generate_agent_config_by_rule(
+        self,
+        entity: EntityNode,
+        allocation: Optional[Any] = None,
+        idx: int = 0,
+    ) -> Dict[str, Any]:
+        """Genera configuración conductual variada basada en cuota demográfica y tipo de actor."""
         entity_type = (entity.get_entity_type() or "Unknown").lower()
+        stances_cycle = ["opposing", "supportive", "neutral", "observer"]
+        stance = getattr(allocation, "stance", None) or stances_cycle[idx % len(stances_cycle)]
+        bias_map = {"opposing": -0.55, "supportive": 0.55, "neutral": 0.0, "observer": -0.15}
+        sentiment_bias = getattr(allocation, "sentiment_bias", None)
+        if sentiment_bias is None:
+            sentiment_bias = bias_map.get(stance, 0.0)
+        activity_level = getattr(allocation, "activity_level", None)
+        if activity_level is None:
+            activity_level = [0.25, 0.45, 0.65, 0.85, 0.35, 0.78][idx % 6]
         
-        if entity_type in ["university", "governmentagency", "ngo"]:
-            # 官方机构：工作时间活动，低频率，高影响力
+        if entity_type in ["university", "governmentagency", "ngo", "regulator", "insurancecompany"]:
             return {
-                "activity_level": 0.2,
-                "posts_per_hour": 0.1,
-                "comments_per_hour": 0.05,
-                "active_hours": list(range(9, 18)),  # 9:00-17:59
-                "response_delay_min": 60,
-                "response_delay_max": 240,
-                "sentiment_bias": 0.0,
-                "stance": "neutral",
-                "influence_weight": 3.0
+                "activity_level": min(0.35, activity_level),
+                "posts_per_hour": 0.15,
+                "comments_per_hour": 0.10,
+                "active_hours": list(range(8, 18)),
+                "response_delay_min": 45,
+                "response_delay_max": 180,
+                "sentiment_bias": sentiment_bias,
+                "stance": stance,
+                "influence_weight": 2.8,
             }
-        elif entity_type in ["mediaoutlet"]:
-            # 媒体：全天活动，中等频率，高影响力
+        elif entity_type in ["mediaoutlet", "news_portals"]:
             return {
-                "activity_level": 0.5,
+                "activity_level": max(0.50, activity_level),
                 "posts_per_hour": 0.8,
-                "comments_per_hour": 0.3,
-                "active_hours": list(range(7, 24)),  # 7:00-23:59
+                "comments_per_hour": 0.35,
+                "active_hours": list(range(6, 23)),
                 "response_delay_min": 5,
                 "response_delay_max": 30,
-                "sentiment_bias": 0.0,
-                "stance": "observer",
-                "influence_weight": 2.5
-            }
-        elif entity_type in ["professor", "expert", "official"]:
-            # 专家/教授：工作+晚间活动，中等频率
-            return {
-                "activity_level": 0.4,
-                "posts_per_hour": 0.3,
-                "comments_per_hour": 0.5,
-                "active_hours": list(range(8, 22)),  # 8:00-21:59
-                "response_delay_min": 15,
-                "response_delay_max": 90,
-                "sentiment_bias": 0.0,
-                "stance": "neutral",
-                "influence_weight": 2.0
-            }
-        elif entity_type in ["student"]:
-            # 学生：晚间为主，高频率
-            return {
-                "activity_level": 0.8,
-                "posts_per_hour": 0.6,
-                "comments_per_hour": 1.5,
-                "active_hours": [8, 9, 10, 11, 12, 13, 18, 19, 20, 21, 22, 23],  # 上午+晚间
-                "response_delay_min": 1,
-                "response_delay_max": 15,
-                "sentiment_bias": 0.0,
-                "stance": "neutral",
-                "influence_weight": 0.8
-            }
-        elif entity_type in ["alumni"]:
-            # 校友：晚间为主
-            return {
-                "activity_level": 0.6,
-                "posts_per_hour": 0.4,
-                "comments_per_hour": 0.8,
-                "active_hours": [12, 13, 19, 20, 21, 22, 23],  # 午休+晚间
-                "response_delay_min": 5,
-                "response_delay_max": 30,
-                "sentiment_bias": 0.0,
-                "stance": "neutral",
-                "influence_weight": 1.0
+                "sentiment_bias": sentiment_bias,
+                "stance": "observer" if stance == "neutral" else stance,
+                "influence_weight": 2.4,
             }
         else:
-            # 普通人：晚间高峰
             return {
-                "activity_level": 0.7,
-                "posts_per_hour": 0.5,
-                "comments_per_hour": 1.2,
-                "active_hours": [9, 10, 11, 12, 13, 18, 19, 20, 21, 22, 23],  # 白天+晚间
-                "response_delay_min": 2,
-                "response_delay_max": 20,
-                "sentiment_bias": 0.0,
-                "stance": "neutral",
-                "influence_weight": 1.0
+                "activity_level": activity_level,
+                "posts_per_hour": round(0.2 + activity_level * 0.6, 2),
+                "comments_per_hour": round(0.4 + activity_level * 1.1, 2),
+                "active_hours": [7, 8, 12, 13, 18, 19, 20, 21, 22],
+                "response_delay_min": 3,
+                "response_delay_max": 35,
+                "sentiment_bias": sentiment_bias,
+                "stance": stance,
+                "influence_weight": 1.0 if stance != "opposing" else 1.25,
             }
     
 

@@ -3,13 +3,13 @@
     <!-- Top Control Bar -->
     <div class="control-bar">
       <div class="status-group">
-        <!-- Twitter 平台进度 -->
+        <!-- Twitter -->
         <div class="platform-status twitter" :class="{ active: runStatus.twitter_running, completed: runStatus.twitter_completed }">
           <div class="platform-header">
             <svg class="platform-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
-            <span class="platform-name">Info Plaza</span>
+            <span class="platform-name">Plaza Pública Digital</span>
             <span v-if="runStatus.twitter_completed" class="status-badge">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -18,21 +18,21 @@
           </div>
           <div class="platform-stats">
             <span class="stat">
-              <span class="stat-label">ROUND</span>
+              <span class="stat-label">RONDA</span>
               <span class="stat-value mono">{{ runStatus.twitter_current_round || 0 }}<span class="stat-total">/{{ runStatus.total_rounds || maxRounds || '-' }}</span></span>
             </span>
             <span class="stat">
-              <span class="stat-label">TIME</span>
+              <span class="stat-label">TIEMPO</span>
               <span class="stat-value mono">{{ twitterElapsedTime }}</span>
             </span>
             <span class="stat">
-              <span class="stat-label">ACTS</span>
+              <span class="stat-label">ACCIONES</span>
               <span class="stat-value mono">{{ runStatus.twitter_actions_count || 0 }}</span>
             </span>
           </div>
-          <!-- 可用动作提示 -->
+          <!-- -->
           <div class="actions-tooltip">
-            <div class="tooltip-title">Available Actions</div>
+            <div class="tooltip-title">Acciones Disponibles</div>
             <div class="tooltip-actions">
               <span class="tooltip-action">POST</span>
               <span class="tooltip-action">LIKE</span>
@@ -44,13 +44,13 @@
           </div>
         </div>
         
-        <!-- Reddit 平台进度 -->
+        <!-- Reddit -->
         <div class="platform-status reddit" :class="{ active: runStatus.reddit_running, completed: runStatus.reddit_completed }">
           <div class="platform-header">
             <svg class="platform-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
             </svg>
-            <span class="platform-name">Topic Community</span>
+            <span class="platform-name">Comunidad Temática</span>
             <span v-if="runStatus.reddit_completed" class="status-badge">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -59,21 +59,21 @@
           </div>
           <div class="platform-stats">
             <span class="stat">
-              <span class="stat-label">ROUND</span>
+              <span class="stat-label">RONDA</span>
               <span class="stat-value mono">{{ runStatus.reddit_current_round || 0 }}<span class="stat-total">/{{ runStatus.total_rounds || maxRounds || '-' }}</span></span>
             </span>
             <span class="stat">
-              <span class="stat-label">TIME</span>
+              <span class="stat-label">TIEMPO</span>
               <span class="stat-value mono">{{ redditElapsedTime }}</span>
             </span>
             <span class="stat">
-              <span class="stat-label">ACTS</span>
+              <span class="stat-label">ACCIONES</span>
               <span class="stat-value mono">{{ runStatus.reddit_actions_count || 0 }}</span>
             </span>
           </div>
-          <!-- 可用动作提示 -->
+          <!-- -->
           <div class="actions-tooltip">
-            <div class="tooltip-title">Available Actions</div>
+            <div class="tooltip-title">Acciones Disponibles</div>
             <div class="tooltip-actions">
               <span class="tooltip-action">POST</span>
               <span class="tooltip-action">COMMENT</span>
@@ -91,6 +91,28 @@
       </div>
 
       <div class="action-controls">
+        <button
+          class="action-btn secondary"
+          :disabled="isRunningChannels"
+          @click="handleRunMultichannel"
+        >
+          {{ isRunningChannels ? 'Ejecutando 11 canales...' : 'Simular 11 Canales' }}
+        </button>
+        <button
+          class="action-btn secondary"
+          :disabled="isRunningSurvey"
+          @click="handleRunSurvey"
+        >
+          {{ isRunningSurvey ? `Encuesta (${surveyProgress}%)` : 'Encuesta N=300' }}
+        </button>
+        <button
+          v-if="phase === 1 && !runStatus.all_completed"
+          class="action-btn stop-btn"
+          :disabled="isStopping"
+          @click="handleStopSimulation"
+        >
+          {{ isStopping ? 'Deteniendo...' : 'Detener simulación' }}
+        </button>
         <button 
           class="action-btn primary"
           :disabled="phase !== 2 || isGeneratingReport"
@@ -100,6 +122,55 @@
           {{ isGeneratingReport ? $t('step3.generatingReportBtn') : $t('step3.startGenerateReportBtn') }}
           <span v-if="!isGeneratingReport" class="arrow-icon">→</span>
         </button>
+      </div>
+    </div>
+
+    <!-- ChannelMonitorWorkspace: Barra Multicanal (11 Canales + Encuesta + Legado) -->
+    <div class="channel-workspace-bar">
+      <div class="channel-tabs">
+        <button
+          type="button"
+          class="channel-tab"
+          :class="{ active: activeChannelFilter === 'all' }"
+          @click="selectChannelFilter('all')"
+        >
+          Todos ({{ multichannelEvents.length || allActions.length }})
+        </button>
+        <button
+          v-for="ch in channelTabs"
+          :key="ch.channel_id"
+          type="button"
+          class="channel-tab"
+          :class="{ active: activeChannelFilter === ch.channel_id }"
+          @click="selectChannelFilter(ch.channel_id)"
+        >
+          {{ ch.label }}
+          <span v-if="channelCounts[ch.channel_id]" class="tab-count">{{ channelCounts[ch.channel_id] }}</span>
+        </button>
+      </div>
+      <div v-if="surveyResultSummary" class="survey-status-banner">
+        Encuesta estructurada: <strong>{{ surveyResultSummary.completed_n }}/{{ surveyResultSummary.requested_n }}</strong> registros guardados en <code>simulation_channels.db</code>
+      </div>
+    </div>
+
+    <!-- Vista especializada multicanal cuando hay canal seleccionado o eventos multicanal -->
+    <div v-if="activeChannelFilter !== 'all' && channelSessionItems.length > 0" class="channel-session-drawer">
+      <div class="session-drawer-header">
+        <strong>Detalle de Canal: {{ activeChannelFilter }}</strong>
+        <span>{{ channelSessionItems.length }} registros</span>
+      </div>
+      <div class="session-items-list">
+        <div v-for="(item, idx) in channelSessionItems.slice(0, 12)" :key="idx" class="session-item-card">
+          <div class="session-item-meta">
+            <span class="mono">{{ item.actor_name || item.respondent_id || 'Actor' }}</span>
+            <span>{{ item.city_name || item.city_divipola || '' }} {{ item.stratum_code ? '· ' + item.stratum_code : '' }}</span>
+            <span v-if="item.message_type === 'voice_note'" class="voice-badge">Nota de voz ({{ item.duration_sec }}s)</span>
+            <span v-if="item.objection_tag || item.main_objection" class="objection-badge">{{ item.objection_tag || item.main_objection }}</span>
+          </div>
+          <div class="session-item-body">
+            {{ item.content_text || item.reaction_text || item.verbatim_response || JSON.stringify(item) }}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -157,12 +228,12 @@
               </div>
               
               <div class="card-body">
-                <!-- CREATE_POST: 发布帖子 -->
+                <!-- CREATE_POST: -->
                 <div v-if="action.action_type === 'CREATE_POST' && action.action_args?.content" class="content-text main-text">
                   {{ action.action_args.content }}
                 </div>
 
-                <!-- QUOTE_POST: 引用帖子 -->
+                <!-- QUOTE_POST: -->
                 <template v-if="action.action_type === 'QUOTE_POST'">
                   <div v-if="action.action_args?.quote_content" class="content-text">
                     {{ action.action_args.quote_content }}
@@ -178,7 +249,7 @@
                   </div>
                 </template>
 
-                <!-- REPOST: 转发帖子 -->
+                <!-- REPOST: -->
                 <template v-if="action.action_type === 'REPOST'">
                   <div class="repost-info">
                     <svg class="icon-small" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
@@ -189,7 +260,7 @@
                   </div>
                 </template>
 
-                <!-- LIKE_POST: 点赞帖子 -->
+                <!-- LIKE_POST: -->
                 <template v-if="action.action_type === 'LIKE_POST'">
                   <div class="like-info">
                     <svg class="icon-small filled" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
@@ -200,7 +271,7 @@
                   </div>
                 </template>
 
-                <!-- CREATE_COMMENT: 发表评论 -->
+                <!-- CREATE_COMMENT: -->
                 <template v-if="action.action_type === 'CREATE_COMMENT'">
                   <div v-if="action.action_args?.content" class="content-text">
                     {{ action.action_args.content }}
@@ -211,7 +282,7 @@
                   </div>
                 </template>
 
-                <!-- SEARCH_POSTS: 搜索帖子 -->
+                <!-- SEARCH_POSTS: -->
                 <template v-if="action.action_type === 'SEARCH_POSTS'">
                   <div class="search-info">
                     <svg class="icon-small" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -220,7 +291,7 @@
                   </div>
                 </template>
 
-                <!-- FOLLOW: 关注用户 -->
+                <!-- FOLLOW: -->
                 <template v-if="action.action_type === 'FOLLOW'">
                   <div class="follow-info">
                     <svg class="icon-small" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
@@ -240,7 +311,7 @@
                   </div>
                 </template>
 
-                <!-- DO_NOTHING: 无操作（静默） -->
+                <!-- DO_NOTHING: （） -->
                 <template v-if="action.action_type === 'DO_NOTHING'">
                   <div class="idle-info">
                     <svg class="icon-small" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
@@ -248,7 +319,7 @@
                   </div>
                 </template>
 
-                <!-- 通用回退：未知类型或有 content 但未被上述处理 -->
+                <!-- ： content -->
                 <div v-if="!['CREATE_POST', 'QUOTE_POST', 'REPOST', 'LIKE_POST', 'CREATE_COMMENT', 'SEARCH_POSTS', 'FOLLOW', 'UPVOTE_POST', 'DOWNVOTE_POST', 'DO_NOTHING'].includes(action.action_type) && action.action_args?.content" class="content-text">
                   {{ action.action_args.content }}
                 </div>
@@ -290,10 +361,17 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
+  prepareSimulation,
+  getPrepareStatus,
   startSimulation,
   stopSimulation,
   getRunStatus,
-  getRunStatusDetail
+  getRunStatusDetail,
+  getChannelEvents,
+  getChannelSessions,
+  runMultichannelSimulation,
+  runStructuredSurvey,
+  getSwarmTaskStatus
 } from '../api/simulation'
 import { generateReport } from '../api/report'
 
@@ -301,10 +379,10 @@ const { t } = useI18n()
 
 const props = defineProps({
   simulationId: String,
-  maxRounds: Number, // 从Step2传入的最大轮数
+  maxRounds: Number, // Step2
   minutesPerRound: {
     type: Number,
-    default: 30 // 默认每轮30分钟
+    default: 30 // 30
   },
   projectData: Object,
   graphData: Object,
@@ -317,22 +395,47 @@ const router = useRouter()
 
 // State
 const isGeneratingReport = ref(false)
-const phase = ref(0) // 0: 未开始, 1: 运行中, 2: 已完成
+const phase = ref(0) // 0: , 1: , 2:
 const isStarting = ref(false)
 const isStopping = ref(false)
 const startError = ref(null)
 const runStatus = ref({})
-const allActions = ref([]) // 所有动作（增量累积）
-const actionIds = ref(new Set()) // 用于去重的动作ID集合
+const allActions = ref([]) // （）
+const actionIds = ref(new Set()) // ID
 const scrollContainer = ref(null)
 
+// Estado ChannelMonitorWorkspace (Fase 3)
+const activeChannelFilter = ref('all')
+const multichannelEvents = ref([])
+const channelSessionItems = ref([])
+const channelCounts = ref({})
+const isRunningChannels = ref(false)
+const isRunningSurvey = ref(false)
+const surveyProgress = ref(0)
+const surveyResultSummary = ref(null)
+let surveyPollTimer = null
+
+const channelTabs = [
+  { channel_id: 'whatsapp_1on1', label: 'WhatsApp 1-a-1' },
+  { channel_id: 'focus_group', label: 'Focus Group' },
+  { channel_id: 'street_survey', label: 'Encuesta Calle' },
+  { channel_id: 'facebook_groups', label: 'Grupos FB' },
+  { channel_id: 'tiktok', label: 'TikTok' },
+  { channel_id: 'instagram', label: 'Instagram' },
+  { channel_id: 'news_portals', label: 'Noticieros' },
+  { channel_id: 'colombian_web', label: 'Web CO' },
+  { channel_id: 'advertising', label: 'Publicidad' },
+  { channel_id: 'tv', label: 'TV' },
+  { channel_id: 'radio', label: 'Radio' }
+]
+
 // Computed
-// 按时间顺序显示动作（最新的在最后面，即底部）
+// （，）
 const chronologicalActions = computed(() => {
   return allActions.value
 })
 
-// 各平台动作计数
+
 const twitterActionsCount = computed(() => {
   return allActions.value.filter(a => a.platform === 'twitter').length
 })
@@ -341,7 +444,7 @@ const redditActionsCount = computed(() => {
   return allActions.value.filter(a => a.platform === 'reddit').length
 })
 
-// 格式化模拟流逝时间（根据轮次和每轮分钟数计算）
+// （）
 const formatElapsedTime = (currentRound) => {
   if (!currentRound || currentRound <= 0) return '0h 0m'
   const totalMinutes = currentRound * props.minutesPerRound
@@ -350,12 +453,12 @@ const formatElapsedTime = (currentRound) => {
   return `${hours}h ${minutes}m`
 }
 
-// Twitter平台的模拟流逝时间
+// Twitter
 const twitterElapsedTime = computed(() => {
   return formatElapsedTime(runStatus.value.twitter_current_round || 0)
 })
 
-// Reddit平台的模拟流逝时间
+// Reddit
 const redditElapsedTime = computed(() => {
   return formatElapsedTime(runStatus.value.reddit_current_round || 0)
 })
@@ -365,7 +468,7 @@ const addLog = (msg) => {
   emit('add-log', msg)
 }
 
-// 重置所有状态（用于重新启动模拟）
+// （）
 const resetAllState = () => {
   phase.value = 0
   runStatus.value = {}
@@ -376,30 +479,41 @@ const resetAllState = () => {
   startError.value = null
   isStarting.value = false
   isStopping.value = false
-  stopPolling()  // 停止之前可能存在的轮询
+  stopPolling()
 }
 
-// 启动模拟
+
 const doStartSimulation = async () => {
   if (!props.simulationId) {
     addLog(t('log.errorMissingSimId'))
     return
   }
 
-  // 先重置所有状态，确保不会受到上一次模拟的影响
+  // Reiniciar estado antes de iniciar el flujo secuencial de 3 etapas
   resetAllState()
   
   isStarting.value = true
   startError.value = null
-  addLog(t('log.startingDualSim'))
   emit('update-status', 'processing')
+
+  // Etapa 3.1: Simular los 11 canales colombianos
+  addLog('Etapa 3.1/3: Ejecutando simulación en 11 canales colombianos...')
+  await handleRunMultichannel()
+
+  // Etapa 3.2: Ejecutar Encuesta Estructurada Estratificada N=300
+  addLog('Etapa 3.2/3: Ejecutando encuesta estructurada estratificada N=300...')
+  await handleRunSurvey()
+
+  // Etapa 3.3: Iniciar simulación por rondas (Plaza Pública Digital / Comunidad Temática)
+  addLog('Etapa 3.3/3: Iniciando simulación por rondas (Plaza Pública Digital / Comunidad Temática)...')
+  addLog(t('log.startingDualSim'))
   
   try {
     const params = {
       simulation_id: props.simulationId,
       platform: 'parallel',
-      force: true,  // 强制重新开始
-      enable_graph_memory_update: true  // 开启动态图谱更新
+      force: true,
+      enable_graph_memory_update: true
     }
     
     if (props.maxRounds) {
@@ -409,7 +523,29 @@ const doStartSimulation = async () => {
     
     addLog(t('log.graphMemoryUpdateEnabled'))
     
-    const res = await startSimulation(params)
+    let res
+    try {
+      res = await startSimulation(params)
+    } catch (startErr) {
+      const msg = String(startErr?.message || '')
+      if (msg.includes('/prepare') || msg.includes('no lista')) {
+        addLog('Preparando entorno de rondas (/prepare) automáticamente antes de iniciar Etapa 3.3...')
+        await prepareSimulation({ simulation_id: props.simulationId })
+        for (let attempt = 0; attempt < 90; attempt++) {
+          await new Promise(r => setTimeout(r, 2000))
+          const pSt = await getPrepareStatus({ simulation_id: props.simulationId })
+          if (pSt?.success && (pSt.data?.status === 'ready' || pSt.data?.already_prepared)) {
+            break
+          }
+          if (pSt?.data?.status === 'failed') {
+            throw new Error(pSt.data?.error || 'Falló la preparación automática')
+          }
+        }
+        res = await startSimulation(params)
+      } else {
+        throw startErr
+      }
+    }
     
     if (res.success && res.data) {
       if (res.data.force_restarted) {
@@ -424,7 +560,7 @@ const doStartSimulation = async () => {
       startStatusPolling()
       startDetailPolling()
     } else {
-      startError.value = res.error || '启动失败'
+      startError.value = res.error || 'Error al iniciar'
       addLog(t('log.startFailed', { error: res.error || t('common.unknownError') }))
       emit('update-status', 'error')
     }
@@ -437,7 +573,7 @@ const doStartSimulation = async () => {
   }
 }
 
-// 停止模拟
+
 const handleStopSimulation = async () => {
   if (!props.simulationId) return
   
@@ -462,7 +598,7 @@ const handleStopSimulation = async () => {
   }
 }
 
-// 轮询状态
+
 let statusTimer = null
 let detailTimer = null
 
@@ -485,7 +621,7 @@ const stopPolling = () => {
   }
 }
 
-// 追踪各平台的上一次轮次，用于检测变化并输出日志
+// ，
 const prevTwitterRound = ref(0)
 const prevRedditRound = ref(0)
 
@@ -500,7 +636,7 @@ const fetchRunStatus = async () => {
       
       runStatus.value = data
       
-      // 分别检测各平台的轮次变化并输出日志
+
       if (data.twitter_current_round > prevTwitterRound.value) {
         addLog(`[Plaza] R${data.twitter_current_round}/${data.total_rounds} | T:${data.twitter_simulated_hours || 0}h | A:${data.twitter_actions_count}`)
         prevTwitterRound.value = data.twitter_current_round
@@ -511,12 +647,10 @@ const fetchRunStatus = async () => {
         prevRedditRound.value = data.reddit_current_round
       }
       
-      // 检测模拟是否已完成（通过 runner_status 或平台完成状态判断）
-      const isCompleted = data.runner_status === 'completed' || data.runner_status === 'stopped'
-      const isFailed = data.runner_status === 'failed'
-      
       // runner_status is authoritative because the backend only publishes a
       // terminal state after the Zep ingestion barrier has completed.
+      const isCompleted = data.runner_status === 'completed' || data.runner_status === 'stopped'
+      const isFailed = data.runner_status === 'failed'
       if (isFailed) {
         addLog(t('log.simFailed') + (data.error ? `: ${data.error}` : ''))
         phase.value = 2
@@ -530,28 +664,28 @@ const fetchRunStatus = async () => {
       }
     }
   } catch (err) {
-    console.warn('获取运行状态失败:', err)
+    console.warn('\u83b7\u53d6\u8fd0\u884c\u72b6\u6001\u5931\u8d25:', err)
   }
 }
 
-// 检查所有启用的平台是否已完成
+
 const checkPlatformsCompleted = (data) => {
-  // 如果没有任何平台数据，返回 false
+  // ， false
   if (!data) return false
   
-  // 检查各平台的完成状态
+
   const twitterCompleted = data.twitter_completed === true
   const redditCompleted = data.reddit_completed === true
   
-  // 如果至少有一个平台完成了，检查是否所有启用的平台都完成了
-  // 通过 actions_count 判断平台是否被启用（如果 count > 0 或 running 曾为 true）
+  // ，
+  //  actions_count （ count > 0  running  true）
   const twitterEnabled = (data.twitter_actions_count > 0) || data.twitter_running || twitterCompleted
   const redditEnabled = (data.reddit_actions_count > 0) || data.reddit_running || redditCompleted
   
-  // 如果没有任何平台被启用，返回 false
+  // ， false
   if (!twitterEnabled && !redditEnabled) return false
   
-  // 检查所有启用的平台是否都已完成
+
   if (twitterEnabled && !twitterCompleted) return false
   if (redditEnabled && !redditCompleted) return false
   
@@ -565,13 +699,13 @@ const fetchRunStatusDetail = async () => {
     const res = await getRunStatusDetail(props.simulationId)
     
     if (res.success && res.data) {
-      // 使用 all_actions 获取完整的动作列表
+      //  all_actions
       const serverActions = res.data.all_actions || []
       
-      // 增量添加新动作（去重）
+      // （）
       let newActionsAdded = 0
       serverActions.forEach(action => {
-        // 生成唯一ID
+        // ID
         const actionId = action.id || `${action.timestamp}-${action.platform}-${action.agent_id}-${action.action_type}`
         
         if (!actionIds.value.has(actionId)) {
@@ -584,11 +718,11 @@ const fetchRunStatusDetail = async () => {
         }
       })
       
-      // 不自动滚动，让用户自由查看时间轴
-      // 新动作会在底部追加
+      // ，
+
     }
   } catch (err) {
-    console.warn('获取详细状态失败:', err)
+    console.warn('\u83b7\u53d6\u8be6\u7ec6\u72b6\u6001\u5931\u8d25:', err)
   }
 }
 
@@ -666,7 +800,7 @@ const handleNextStep = async () => {
       const reportId = res.data.report_id
       addLog(t('log.reportGenTaskStarted', { reportId }))
       
-      // 跳转到报告页面
+
       router.push({ name: 'Report', params: { reportId } })
     } else {
       addLog(t('log.reportGenFailed', { error: res.error || t('common.unknownError') }))
@@ -688,15 +822,139 @@ watch(() => props.systemLogs?.length, () => {
   })
 })
 
-onMounted(() => {
+onMounted(async () => {
   addLog(t('log.step3Init'))
-  if (props.simulationId) {
-    doStartSimulation()
+  if (!props.simulationId) return
+  await loadMultichannelData()
+
+  try {
+    const res = await getRunStatus(props.simulationId)
+    if (res.success && res.data && ['running', 'starting', 'stopping', 'completed', 'stopped'].includes(res.data.runner_status)) {
+      const data = res.data
+      runStatus.value = data
+      prevTwitterRound.value = data.twitter_current_round || 0
+      prevRedditRound.value = data.reddit_current_round || 0
+      await fetchRunStatusDetail()
+
+      if (data.runner_status === 'completed' || data.runner_status === 'stopped') {
+        phase.value = 2
+        addLog(t('log.simCompleted'))
+        emit('update-status', 'completed')
+      } else {
+        phase.value = 1
+        emit('update-status', 'processing')
+        startStatusPolling()
+        startDetailPolling()
+      }
+      return
+    }
+  } catch (err) {
+    console.warn('\u83b7\u53d6\u6a21\u62df\u72b6\u6001\u5931\u8d25:', err)
   }
+
+  doStartSimulation()
 })
+
+const loadMultichannelData = async () => {
+  if (!props.simulationId) return
+  try {
+    const res = await getChannelEvents(props.simulationId, {
+      channel_id: activeChannelFilter.value === 'all' ? undefined : activeChannelFilter.value,
+      limit: 120
+    })
+    if (res?.success && res.data) {
+      multichannelEvents.value = res.data.events || []
+      const summary = res.data.channels_summary || {}
+      const counts = {}
+      Object.entries(summary).forEach(([cid, info]) => {
+        counts[cid] = info.actions_count || 0
+      })
+      channelCounts.value = counts
+    }
+  } catch (err) {
+    // Mantiene flujo legado si aún no hay simulation_channels.db
+  }
+}
+
+const selectChannelFilter = async (channelId) => {
+  activeChannelFilter.value = channelId
+  channelSessionItems.value = []
+  await loadMultichannelData()
+  if (channelId !== 'all' && props.simulationId) {
+    try {
+      const sRes = await getChannelSessions(props.simulationId, channelId, 50)
+      if (sRes?.success && sRes.data) {
+        channelSessionItems.value = sRes.data.items || []
+      }
+    } catch (err) {}
+  }
+}
+
+const handleRunMultichannel = async () => {
+  if (!props.simulationId || isRunningChannels.value) return
+  isRunningChannels.value = true
+  addLog('Ejecutando simulación en 11 canales colombianos...')
+  try {
+    const res = await runMultichannelSimulation(props.simulationId, { rounds: 2 })
+    if (res?.success) {
+      addLog(`Canales ejecutados: ${res.data?.channels_executed?.length || 11}, eventos=${res.data?.totals?.events || 0}`)
+      await loadMultichannelData()
+    }
+  } catch (err) {
+    addLog(`Error ejecutando canales: ${err.message}`)
+  } finally {
+    isRunningChannels.value = false
+  }
+}
+
+const handleRunSurvey = () => {
+  if (!props.simulationId || isRunningSurvey.value) return Promise.resolve()
+  isRunningSurvey.value = true
+  surveyProgress.value = 5
+  addLog('Iniciando encuesta estructurada estratificada N=300...')
+  return new Promise(async (resolve) => {
+    try {
+      const res = await runStructuredSurvey(props.simulationId, { sample_size: 300, use_llm: false })
+      if (res?.success && res.data?.task_id) {
+        const tid = res.data.task_id
+        surveyPollTimer = setInterval(async () => {
+          try {
+            const st = await getSwarmTaskStatus(props.simulationId, tid)
+            if (st?.success && st.data) {
+              surveyProgress.value = st.data.progress || 0
+              if (st.data.status === 'completed') {
+                clearInterval(surveyPollTimer)
+                surveyPollTimer = null
+                isRunningSurvey.value = false
+                surveyResultSummary.value = st.data.result
+                addLog(`Encuesta completada: ${st.data.result?.completed_n || 300} respuestas`)
+                await loadMultichannelData()
+                resolve()
+              } else if (st.data.status === 'failed') {
+                clearInterval(surveyPollTimer)
+                surveyPollTimer = null
+                isRunningSurvey.value = false
+                addLog('Encuesta finalizó con advertencia; continuando secuencia.')
+                resolve()
+              }
+            }
+          } catch (e) {}
+        }, 1500)
+      } else {
+        isRunningSurvey.value = false
+        resolve()
+      }
+    } catch (err) {
+      addLog(`Error lanzando encuesta: ${err.message}`)
+      isRunningSurvey.value = false
+      resolve()
+    }
+  })
+}
 
 onUnmounted(() => {
   stopPolling()
+  if (surveyPollTimer) clearInterval(surveyPollTimer)
 })
 </script>
 
@@ -756,6 +1014,34 @@ onUnmounted(() => {
 }
 
 /* Actions Tooltip */
+.action-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stop-btn {
+  padding: 8px 14px;
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stop-btn:hover:not(:disabled) {
+  background: #DC2626;
+  color: #FFFFFF;
+}
+
+.stop-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .actions-tooltip {
   position: absolute;
   top: 100%;
@@ -1264,5 +1550,105 @@ onUnmounted(() => {
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-right: 6px;
+}
+
+.channel-workspace-bar {
+  background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 8px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.channel-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.channel-tab {
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.channel-tab.active {
+  background: #0F172A;
+  color: #FFFFFF;
+  border-color: #0F172A;
+}
+
+.tab-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.survey-status-banner {
+  font-size: 11px;
+  color: #0F766E;
+  background: #F0FDFA;
+  border: 1px solid #CCFBF1;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.channel-session-drawer {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  padding: 10px 20px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.session-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.session-items-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.session-item-card {
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 8px;
+  background: #F8FAFC;
+  font-size: 12px;
+}
+
+.session-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.voice-badge {
+  background: #DBEAFE;
+  color: #1E40AF;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.objection-badge {
+  background: #FEE2E2;
+  color: #991B1B;
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 </style>

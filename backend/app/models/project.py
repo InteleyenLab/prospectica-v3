@@ -50,6 +50,13 @@ class Project:
     simulation_requirement: Optional[str] = None
     chunk_size: int = 500
     chunk_overlap: int = 50
+
+    # Contexto territorial y auditoría documental (Fase 1 - retrocompatible)
+    country_code: str = "co"
+    target_cities: List[str] = field(default_factory=list)
+    target_strata: List[str] = field(default_factory=list)
+    quant_store_path: Optional[str] = None
+    extraction_audit: Optional[List[Dict[str, Any]]] = None
     
     # 错误信息
     error: Optional[str] = None
@@ -73,6 +80,11 @@ class Project:
             "simulation_requirement": self.simulation_requirement,
             "chunk_size": self.chunk_size,
             "chunk_overlap": self.chunk_overlap,
+            "country_code": self.country_code,
+            "target_cities": self.target_cities,
+            "target_strata": self.target_strata,
+            "quant_store_path": self.quant_store_path,
+            "extraction_audit": self.extraction_audit,
             "error": self.error
         }
     
@@ -100,6 +112,11 @@ class Project:
             simulation_requirement=data.get('simulation_requirement'),
             chunk_size=data.get('chunk_size', 500),
             chunk_overlap=data.get('chunk_overlap', 50),
+            country_code=data.get('country_code', 'co'),
+            target_cities=data.get('target_cities') or [],
+            target_strata=data.get('target_strata') or [],
+            quant_store_path=data.get('quant_store_path'),
+            extraction_audit=data.get('extraction_audit'),
             error=data.get('error')
         )
 

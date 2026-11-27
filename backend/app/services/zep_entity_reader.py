@@ -14,6 +14,39 @@ from ..utils.zep import call_zep_read_with_retry, get_zep_client
 
 logger = get_logger('mirofish.zep_entity_reader')
 
+# Tipos conceptuales o cuantitativos de contexto territorial/estadístico que no deben
+# convertirse en avatares/ciudadanos simulables en OASIS.
+NON_HUMAN_ENTITY_TYPES = frozenset({
+    "TerritoryMetric",
+    "MacroIndicator",
+    "DemographicStratum",
+    "MarketStatistic",
+    "RegulatoryRule",
+    "StudyHypothesis",
+    "OfficialSource",
+    "Territory",
+    "Statistic",
+    "QuantitativeMetric",
+    "Metric",
+    "Concept",
+    "Service",
+    "Channel",
+    "Claim",
+    "City",
+    "Product",
+    "Policy",
+    "Document",
+    "Vehicle",
+    "Location",
+    "CityDemographicNode",
+    "SocioeconomicStratumNode",
+    "EconomicIndicatorNode",
+    "MediaConsumptionNode",
+    "CulturalArchetypeNode",
+    "UserSourceFactNode",
+})
+NON_HUMAN_ENTITY_TYPES_LOWER = frozenset(t.lower() for t in NON_HUMAN_ENTITY_TYPES)
+
 # 用于泛型返回类型
 T = TypeVar('T')
 
@@ -222,7 +255,8 @@ class ZepEntityReader:
         self, 
         graph_id: str,
         defined_entity_types: Optional[List[str]] = None,
-        enrich_with_edges: bool = True
+        enrich_with_edges: bool = True,
+        only_simulatable_actors: bool = False
     ) -> FilteredEntities:
         """
         筛选出符合预定义实体类型的节点
@@ -273,6 +307,9 @@ class ZepEntityReader:
                 entity_type = matching_labels[0]
             else:
                 entity_type = custom_labels[0]
+
+            if only_simulatable_actors and entity_type.lower() in NON_HUMAN_ENTITY_TYPES_LOWER:
+                continue
             
             entity_types_found.add(entity_type)
             
@@ -334,6 +371,47 @@ class ZepEntityReader:
             entity_types=entity_types_found,
             total_count=total_count,
             filtered_count=len(filtered_entities),
+        )
+
+    def fetch_context_nodes(
+        self,
+        graph_id: str,
+        enrich_with_edges: bool = True,
+    ) -> FilteredEntities:
+        """Devuelve únicamente nodos de contexto cuantitativo, territorio, macroeconomía o regulación."""
+        context_types = sorted(NON_HUMAN_ENTITY_TYPES)
+        res = self.filter_defined_entities(
+            graph_id=graph_id,
+            defined_entity_types=None,
+            enrich_with_edges=enrich_with_edges,
+            only_simulatable_actors=False,
+        )
+        ctx_entities = [
+            e
+            for e in res.entities
+            if (e.get_entity_type() or "").lower() in NON_HUMAN_ENTITY_TYPES_LOWER
+        ]
+        ctx_types = {e.get_entity_type() for e in ctx_entities if e.get_entity_type()}
+        _ = context_types
+        return FilteredEntities(
+            entities=ctx_entities,
+            entity_types=ctx_types,
+            total_count=res.total_count,
+            filtered_count=len(ctx_entities),
+        )
+
+    def fetch_simulatable_actors(
+        self,
+        graph_id: str,
+        defined_entity_types: Optional[List[str]] = None,
+        enrich_with_edges: bool = True,
+    ) -> FilteredEntities:
+        """Devuelve solo actores sociales/humanos/organizacionales aptos para poblar agentes."""
+        return self.filter_defined_entities(
+            graph_id=graph_id,
+            defined_entity_types=defined_entity_types,
+            enrich_with_edges=enrich_with_edges,
+            only_simulatable_actors=True,
         )
     
     def get_entity_with_context(

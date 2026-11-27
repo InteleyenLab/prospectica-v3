@@ -1,0 +1,10 @@
+"""Configuración centralizada de identidad de marca (Prospéctica Inc.)."""
+
+BRAND_NAME = "Prospéctica Inc."
+BRAND_SHORT_NAME = "Prospéctica"
+BRAND_UPPER = "PROSPÉCTICA INC."
+BRAND_SLUG = "prospectica"
+BRAND_TAGLINE = "Laboratorio de Simulación Social, Econometría e Inteligencia de Mercados"
+BRAND_ENGINE = "Prospéctica-V2.0"
+BRAND_REPORT_HEADER = "Prospéctica Inc. · Estudio de Inteligencia de Mercados"
+BRAND_GRAPH_NAME = "Prospéctica Market Intelligence Graph"
